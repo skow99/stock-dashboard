@@ -397,6 +397,8 @@ const DICT = {
     'banner.historyBlocked': 'Historia EOD nie jest zapisywana: swiezych notowan {fresh}/{total} (wymagane 80%).',
     'banner.warning': 'Uwaga: {message}',
     'banner.providersDown': 'Zrodla danych chwilowo niedostepne: {list}. Uzywam cache.',
+    'banner.pricesStale': 'Nieaktualne notowania: {count} z {total}. Pokazuje ostatnie znane ceny.',
+    'banner.pricesStaleSource': 'Nieaktualne notowania: {count} z {total} - zrodlo nie odpowiada ({list}). Pokazuje ostatnie znane ceny.',
     'banner.priceStale': 'nieswieze',
 
     'noteKey.webhookTokenShownOnce': 'Zapisz token teraz - nie bedzie mozliwy do odczytania ponownie.',
@@ -796,6 +798,8 @@ const DICT = {
     'banner.historyBlocked': 'EOD history is not being saved: {fresh}/{total} quotes are fresh (80% required).',
     'banner.warning': 'Warning: {message}',
     'banner.providersDown': 'Market data sources temporarily unavailable: {list}. Using cache.',
+    'banner.pricesStale': 'Stale quotes: {count} of {total}. Showing the last known prices.',
+    'banner.pricesStaleSource': 'Stale quotes: {count} of {total} - source not responding ({list}). Showing the last known prices.',
     'banner.priceStale': 'stale',
 
     'noteKey.webhookTokenShownOnce': 'Save the token now — it cannot be read again.',

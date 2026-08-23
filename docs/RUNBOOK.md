@@ -181,6 +181,39 @@ Flaga `-T` jest obowiązkowa — bez niej pseudoterminal przerobi końce linii i
 
 Gdyby mimo to wisiało: sprawdź, czy wisi też zwykłe `vm --command 'echo test'`. Jeśli tak, problem jest w IAP albo OS Login, nie w przesyle — patrz sekcja o `actAs` powyżej.
 
+## Na stronie wisi komunikat o niedostępnym źródle danych
+
+Najpierw sprawdź, czy to naprawdę problem. Od sierpnia 2026 ostrzeżenie pojawia się **tylko wtedy, gdy realnie brakuje świeżych notowań** — samo padnięcie jednego źródła jest obsługiwane przez łańcuch zapasowy i nie powinno nic wyświetlać.
+
+```bash
+vm --command 'curl -s http://127.0.0.1:8787/stock-dashboard/api/v1/health'
+vm --command 'sudo journalctl -u stock-dashboard -n 100 --no-pager | grep provider\.'
+```
+
+W logu szukaj:
+
+| Zdarzenie | Znaczenie |
+|---|---|
+| `provider.http_error` | źródło odpowiedziało błędem HTTP (`status` w polu) |
+| `provider.unexpected_body` | odpowiedź 200, ale treść to nie dane — zwykle strona antybotowa; `probka` pokazuje początek |
+| `provider.fetch_failed` | brak połączenia albo przekroczony czas |
+| `provider.breaker_open` | źródło odcięte na minutę po serii awarii |
+
+Powtórki są dławione do jednej na minutę na źródło, żeby jedna awaria nie zalała journala.
+
+### Stooq (stan na sierpień 2026)
+
+**Stooq jest nieużyteczny dla serwera i to nie jest awaria przejściowa.** Endpoint bieżących notowań (`/q/l/`) zwraca 404 z błędem ich własnej bazy (`mysqli_query()... null given`), a endpoint dzienny (`/q/d/l/`) odpowiada kodem 200, ale oddaje stronę z zabezpieczeniem antybotowym: „This site requires JavaScript to verify your browser" plus zagadka proof-of-work do policzenia w przeglądarce. Serwer bez silnika JavaScript tego nie przejdzie.
+
+Dlatego **Yahoo Finance jest pierwszym źródłem**, a Stooq został jako zapas na wypadek powrotu. Sprawdzenie ręczne:
+
+```bash
+curl -s 'https://stooq.com/q/l/?s=cdr&f=sd2t2ohlcv&e=csv' | head -3
+curl -s 'https://query1.finance.yahoo.com/v8/finance/chart/CDR.WA?range=5d&interval=1d' | head -c 200
+```
+
+Gdyby Stooq wrócił do wydawania CSV, wystarczy zmienić kolejność w `LANCUCH` w `src/market/quotes.mjs`. Test `tests/market-providers.test.mjs` pilnuje, żeby zmiana była świadoma.
+
 ## CI: `Permission denied (publickey)` mimo poprawnych uprawnień
 
 ```

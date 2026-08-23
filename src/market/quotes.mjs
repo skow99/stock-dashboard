@@ -30,8 +30,23 @@ function writeCache(symbol, quote) {
   for (const key of cacheKeys(symbol)) cache.set(key, quote);
 }
 
+/**
+ * Odpowiedz ze Stooq ma byc plikiem CSV. Od sierpnia 2026 serwis oddaje na kodzie 200
+ * strone antybotowa ("This site requires JavaScript to verify your browser") z zagadka
+ * proof-of-work, ktorej serwer bez silnika JavaScript nie rozwiaze. Bez tej kontroli
+ * traktowalibysmy taka strone jako poprawna odpowiedz.
+ */
+export const wygladaJakCsv = (text) => {
+  const t = String(text).trim();
+  return t.length > 0 && !t.startsWith('<') && !/<!DOCTYPE|<html|<script/i.test(t.slice(0, 200)) && t.includes(',');
+};
+
 async function fromStooqLive(symbol) {
-  const text = await fetchText('stooq', `https://stooq.com/q/l/?s=${toStooqSymbol(symbol)}&f=sd2t2ohlcv&e=csv`);
+  const text = await fetchText(
+    'stooq',
+    `https://stooq.com/q/l/?s=${toStooqSymbol(symbol)}&f=sd2t2ohlcv&e=csv`,
+    { looksValid: wygladaJakCsv },
+  );
   if (!text) return null;
   const lines = text.trim().split(/\r?\n/);
   if (lines.length < 2) return null;
@@ -43,7 +58,11 @@ async function fromStooqLive(symbol) {
 }
 
 async function fromStooqDaily(symbol) {
-  const text = await fetchText('stooq', `https://stooq.com/q/d/l/?s=${toStooqSymbol(symbol)}&i=d`);
+  const text = await fetchText(
+    'stooq',
+    `https://stooq.com/q/d/l/?s=${toStooqSymbol(symbol)}&i=d`,
+    { looksValid: wygladaJakCsv },
+  );
   if (!text) return null;
   const lines = text.trim().split(/\r?\n/);
   if (lines.length < 3) return null;
@@ -76,17 +95,29 @@ async function fromYahoo(symbol) {
   };
 }
 
+/**
+ * Kolejnosc zrodel. Yahoo jest pierwsze, bo Stooq przestal byc uzyteczny dla serwera:
+ * endpoint biezacych notowan zwraca 404 z bledem ich wlasnej bazy, a endpoint dzienny
+ * jest za zabezpieczeniem antybotowym wymagajacym wykonania JavaScriptu.
+ *
+ * Stooq zostaje jako zapas, bo moze wrocic - z dzialajacym bezpiecznikiem kosztuje to
+ * kilka nieudanych zapytan na minute, nie wiecej.
+ *
+ * Uwaga na 'source' z holdingow: wartosc 'stooq' jest tam zapisywana AUTOMATYCZNIE
+ * jako domyslna, a nie wybrana przez uzytkownika. Dlatego nie traktujemy jej jako
+ * preferencji - inaczej kazdy portfel zaczynalby od martwego zrodla.
+ */
+const LANCUCH = [fromYahoo, fromStooqLive, fromStooqDaily];
+
 /** Cena jednego instrumentu. Nigdy nie rzuca - zwraca obiekt ze statusem swiezosci. */
-export async function getQuote(symbol, { fallbackPrice = null, preferSource = null } = {}) {
+export async function getQuote(symbol, { fallbackPrice = null } = {}) {
   const key = String(symbol).toUpperCase();
   const memoized = memo.get(key);
   if (memoized && Date.now() - memoized.at < MEMO_TTL_MS) return memoized.quote;
   if (inflight.has(key)) return inflight.get(key);
 
   const task = (async () => {
-    const chain = preferSource === 'yahoo'
-      ? [fromYahoo, fromStooqLive, fromStooqDaily]
-      : [fromStooqLive, fromStooqDaily, fromYahoo];
+    const chain = LANCUCH;
 
     let quote = null;
     for (const provider of chain) {
@@ -131,7 +162,7 @@ export async function getQuotes(specs, { concurrency = 6 } = {}) {
     while (queue.length) {
       const spec = queue.shift();
       // eslint-disable-next-line no-await-in-loop
-      const quote = await getQuote(spec.symbol, { fallbackPrice: spec.fallbackPrice, preferSource: spec.source });
+      const quote = await getQuote(spec.symbol, { fallbackPrice: spec.fallbackPrice });
       out.set(String(spec.symbol).toUpperCase(), quote);
     }
   });

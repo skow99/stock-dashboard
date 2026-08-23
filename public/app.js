@@ -191,11 +191,23 @@ function renderBanners() {
   for (const warning of state.data?.warnings ?? []) {
     host.append(el('div', { class: 'banner', text: t('banner.warning', { message: warning.message }) }));
   }
+  // Niedostepne zrodlo samo w sobie nie jest problemem uzytkownika - od tego jest
+  // lancuch zapasowy. Ostrzegamy dopiero wtedy, gdy REALNIE brakuje swiezych cen.
+  // Wczesniej komunikat wisial na stale, mimo ze wszystkie notowania byly aktualne.
   const brokenProviders = (status?.providers ?? []).filter((p) => p.open);
-  if (brokenProviders.length) {
+  const coverage = status?.quoteCoverage;
+  const nieswieze = coverage?.total ? coverage.total - coverage.fresh : 0;
+
+  if (nieswieze > 0) {
     host.append(el('div', {
       class: 'banner',
-      text: t('banner.providersDown', { list: brokenProviders.map((p) => p.provider).join(', ') }),
+      text: brokenProviders.length
+        ? t('banner.pricesStaleSource', {
+          count: nieswieze,
+          total: coverage.total,
+          list: brokenProviders.map((p) => p.provider).join(', '),
+        })
+        : t('banner.pricesStale', { count: nieswieze, total: coverage.total }),
     }));
   }
 }

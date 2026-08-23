@@ -31,7 +31,23 @@ function recordFailure(provider) {
  * Pobranie tekstu z zewnetrznego zrodla.
  * Zwraca null zamiast rzucac - warstwa wyzej ma zawsze fallback (cache/holdings).
  */
-export async function fetchText(provider, url, { timeoutMs = config.quoteTimeoutMs, headers = {} } = {}) {
+/**
+ * Powod niedostepnosci zrodla trafia do logu na poziomie 'warn', bo produkcja
+ * dziala na 'info' - wczesniej bylo to 'debug' i w journalu nie zostawal zaden slad,
+ * przez co "zrodlo niedostepne" nie dalo sie zdiagnozowac bez zmiany konfiguracji.
+ * Dlawimy powtorki, zeby jedna awaria nie zalala logu przy kazdym symbolu.
+ */
+const ostatnioZgloszone = new Map();
+function zglos(provider, event, fields) {
+  const teraz = Date.now();
+  if (teraz - (ostatnioZgloszone.get(provider) ?? 0) < 60_000) return;
+  ostatnioZgloszone.set(provider, teraz);
+  log.warn(event, { provider, ...fields });
+}
+
+export async function fetchText(provider, url, {
+  timeoutMs = config.quoteTimeoutMs, headers = {}, looksValid = null,
+} = {}) {
   if (config.offlineMarketData) return null;
   if (breakerState(provider).open) return null;
 
@@ -49,15 +65,27 @@ export async function fetchText(provider, url, { timeoutMs = config.quoteTimeout
     });
     if (!res.ok) {
       recordFailure(provider);
-      log.debug('provider.http_error', { provider, status: res.status });
+      zglos(provider, 'provider.http_error', { status: res.status });
       return null;
     }
     const text = await res.text();
+
+    // Odpowiedz 200 nie znaczy, ze dostalismy dane. Stooq oddaje na tym kodzie
+    // strone antybotowa z zagadka JavaScript. Bez tej kontroli liczylibysmy ja jako
+    // sukces, kasujac licznik bezpiecznika - i odpytywalibysmy martwe zrodlo w kolko.
+    if (looksValid && !looksValid(text)) {
+      recordFailure(provider);
+      zglos(provider, 'provider.unexpected_body', {
+        status: res.status, length: text.length, probka: text.trim().slice(0, 80),
+      });
+      return null;
+    }
+
     recordSuccess(provider);
     return text;
   } catch (err) {
     recordFailure(provider);
-    log.debug('provider.fetch_failed', { provider, error: err.message });
+    zglos(provider, 'provider.fetch_failed', { error: err.message });
     return null;
   } finally {
     clearTimeout(timer);

@@ -248,6 +248,34 @@ test('notowania pobierane sa raz na ticker, nie raz na dzien', async () => {
     'drugi portfel musi wziac notowania z cache wspolnego');
 });
 
+test('ticker bez notowan jest zglaszany, a nie pomijany po cichu', async () => {
+  // Symbol spoza slownika CENY - atrapa oddaje pusty wykres, jak Yahoo dla literowki.
+  // Bez tego zgloszenia uzytkownik widzi pusty wykres i nie ma czego szukac.
+  const pid = nowyPortfel();
+  insertCashFlow(pid, { date: START, type: 'Deposit', amount: 10000, currency: 'PLN' }, ctx());
+  insertTransaction(pid, { date: addDays(START, 1), ticker: 'NIEMA.WA', side: 'BUY', qty: 10, price: 50, currency: 'PLN' }, ctx());
+
+  const wynik = await rebuildPortfolioHistory(pid);
+  assert.deepEqual(wynik.missing, ['NIEMA.WA'], 'brakujacy ticker musi trafic do raportu');
+
+  const zrodlo = wynik.sources.find((z) => z.ticker === 'NIEMA.WA');
+  assert.equal(zrodlo.ok, false);
+  assert.equal(zrodlo.points, 0);
+});
+
+test('raport zrodel pokazuje liczbe notowan dla tickera, ktory ma dane', async () => {
+  const pid = nowyPortfel();
+  insertCashFlow(pid, { date: START, type: 'Deposit', amount: 10000, currency: 'PLN' }, ctx());
+  insertTransaction(pid, { date: addDays(START, 1), ticker: 'CDR.WA', side: 'BUY', qty: 10, price: 100, currency: 'PLN' }, ctx());
+
+  const wynik = await rebuildPortfolioHistory(pid);
+  assert.deepEqual(wynik.missing, []);
+  const zrodlo = wynik.sources.find((z) => z.ticker === 'CDR.WA');
+  assert.equal(zrodlo.ok, true);
+  assert.ok(zrodlo.points > 20, `spodziewalem sie serii dziennej, jest ${zrodlo.points} punktow`);
+  assert.ok(zrodlo.first && zrodlo.last, 'raport musi podac zakres dat');
+});
+
 // ---------------------------------------------------------------- niezmiennik nadrzedny
 
 test('ostatni dzien historii zgadza sie z silnikiem widoku biezacego', async () => {

@@ -324,7 +324,17 @@ async function rebuildHistory() {
       ? t('rebuild.done', { days: r.days, from: r.from, to: r.to })
       : t('rebuild.nothing');
     if (r.skipped) cel.textContent += ` ${t('rebuild.skipped', { count: r.skipped })}`;
-    toast(t('rebuild.toast', { days: r.days }), 'success');
+
+    // Ticker, ktorego zrodlo nie zna, cicho wypycha dni z historii. Trzeba go pokazac,
+    // inaczej uzytkownik widzi tylko pusty wykres i nie wie, czego szukac.
+    if (r.missing?.length) {
+      cel.append(el('br'));
+      cel.append(el('span', {
+        class: 'neg',
+        text: t('rebuild.missing', { list: r.missing.join(', ') }),
+      }));
+    }
+    toast(r.days ? t('rebuild.toast', { days: r.days }) : t('rebuild.nothing'), r.days ? 'success' : 'error');
     onImported?.();
   } catch (err) {
     cel.textContent = '';

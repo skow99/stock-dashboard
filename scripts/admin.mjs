@@ -154,7 +154,18 @@ const commands = {
         laczniePunktow += wynik.days;
         const zakres = wynik.from ? `${wynik.from} .. ${wynik.to}` : 'brak transakcji';
         console.log(`  ${(p.email + ' / ' + p.name).padEnd(42)} ${String(wynik.days).padStart(5)} dni  ${zakres}  (${Date.now() - start} ms)`);
+
+        // Per ticker - bez tego "0 dni" nie mowi, czy zawiodl jeden symbol, czy zrodlo.
+        for (const z of wynik.sources ?? []) {
+          const opis = z.ok
+            ? `${String(z.points).padStart(5)} notowan  ${z.first} .. ${z.last}  (${z.provider})`
+            : 'BRAK NOTOWAN - zrodlo nie zna tego symbolu';
+          console.log(`      ${z.ticker.padEnd(12)} ${opis}`);
+        }
         if (wynik.skipped) console.log(`      pominieto ${wynik.skipped} dni bez notowan dla posiadanych pozycji`);
+        if (wynik.missing?.length) {
+          console.log(`      UWAGA: ${wynik.missing.join(', ')} - sprawdz zapis tickera (np. PKN.WA, AAPL.US)`);
+        }
       } catch (err) {
         console.log(`  ${(p.email + ' / ' + p.name).padEnd(42)} BLAD: ${err.message}`);
       }

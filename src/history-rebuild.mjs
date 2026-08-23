@@ -49,7 +49,7 @@ export async function rebuildPortfolioHistory(portfolioId, { from = null } = {})
   const baseline = listBaseline([portfolioId]);
 
   if (!transactions.length && !cashFlows.length) {
-    return { days: 0, from: null, to: todayWarsaw(), tickers: 0, skipped: 0 };
+    return { days: 0, from: null, to: todayWarsaw(), tickers: 0, skipped: 0, sources: [], missing: [] };
   }
 
   // ------------------------------------------------------------ zakres dni
@@ -61,7 +61,7 @@ export async function rebuildPortfolioHistory(portfolioId, { from = null } = {})
   const pierwszy = from ? dzien(from) : daty[0];
   const ostatni = todayWarsaw();
   if (!pierwszy || pierwszy > ostatni) {
-    return { days: 0, from: null, to: ostatni, tickers: 0, skipped: 0 };
+    return { days: 0, from: null, to: ostatni, tickers: 0, skipped: 0, sources: [], missing: [] };
   }
 
   // ------------------------------------------------------------ dane rynkowe
@@ -89,6 +89,28 @@ export async function rebuildPortfolioHistory(portfolioId, { from = null } = {})
       serie.set(klucz, await getDailyCloses(info.symbol));
     }));
     const fxHistory = await getFxHistory();
+
+    // Raport per ticker. Bez niego "historia sie nie zaciagnela" jest nie do
+    // zdiagnozowania: nie widac, czy zawiodl jeden nieznany symbol, czy cale zrodlo.
+    const zrodla = [...tickery.entries()].map(([klucz, info]) => {
+      const s = serie.get(klucz);
+      const punkty = s?.byDay ? Object.keys(s.byDay).length : 0;
+      return {
+        ticker: info.symbol,
+        currency: info.currency,
+        points: punkty,
+        first: s?.first ?? null,
+        last: s?.last ?? null,
+        provider: s?.provider ?? 'none',
+        ok: punkty > 0,
+      };
+    });
+    const bezDanych = zrodla.filter((z) => !z.ok);
+    if (bezDanych.length) {
+      log.warn('history.tickers_without_quotes', {
+        portfolioId, tickers: bezDanych.map((z) => z.ticker),
+      });
+    }
 
     // ------------------------------------------------------------ przejscie po dniach
     const txPosortowane = [...transactions].sort((a, b) => dzien(a.trade_date).localeCompare(dzien(b.trade_date)));
@@ -190,8 +212,17 @@ export async function rebuildPortfolioHistory(portfolioId, { from = null } = {})
     log.info('history.rebuilt', {
       portfolioId, days: punkty.length, from: pierwszy, to: ostatni,
       tickers: tickery.size, skipped: pominietych,
+      bezDanych: bezDanych.map((z) => z.ticker),
     });
-    return { days: punkty.length, from: pierwszy, to: ostatni, tickers: tickery.size, skipped: pominietych };
+    return {
+      days: punkty.length,
+      from: pierwszy,
+      to: ostatni,
+      tickers: tickery.size,
+      skipped: pominietych,
+      sources: zrodla,
+      missing: bezDanych.map((z) => z.ticker),
+    };
   } catch (err) {
     stan.error = err.message;
     stan.done = true;

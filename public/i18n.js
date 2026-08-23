@@ -214,6 +214,7 @@ const DICT = {
     'rebuild.nothing': 'Brak transakcji, nie ma czego przeliczac.',
     'rebuild.skipped': 'Pominieto {count} dni bez notowan.',
     'rebuild.toast': 'Historia przeliczona: {days} dni',
+    'rebuild.missing': 'Brak notowan dla: {list}. Sprawdz zapis tickera - poprawny wyglada jak PKN.WA albo AAPL.US.',
 
     // ---- wykresy i sekcje
     'section.breakdown': 'Podzial na portfele',
@@ -625,6 +626,7 @@ const DICT = {
     'rebuild.nothing': 'No transactions, nothing to rebuild.',
     'rebuild.skipped': 'Skipped {count} days with no quotes.',
     'rebuild.toast': 'History rebuilt: {days} days',
+    'rebuild.missing': 'No quotes for: {list}. Check the ticker spelling - a valid one looks like PKN.WA or AAPL.US.',
 
     // ---- charts and sections
     'section.breakdown': 'Breakdown by portfolio',

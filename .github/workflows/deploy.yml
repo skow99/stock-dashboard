@@ -53,23 +53,57 @@ jobs:
             --transform='s,^\.,stock-dashboard,' .
           ls -lh /tmp/stock-dashboard.tar.gz
 
-      - name: Wyslanie na maszyne
+      # OS Login potrzebuje chwili na rozpropagowanie klucza konta uslugowego przy
+      # pierwszym polaczeniu. Sonda z krotkim limitem daje czytelny blad zamiast zawieszenia.
+      - name: Sprawdzenie polaczenia z maszyna
+        timeout-minutes: 5
         run: |
-          gcloud compute scp /tmp/stock-dashboard.tar.gz \
+          for i in $(seq 1 6); do
+            if timeout 45 gcloud compute ssh "${{ vars.GCP_VM_NAME }}" \
+                 --zone "${{ vars.GCP_ZONE }}" --tunnel-through-iap --quiet \
+                 --ssh-flag="-o StrictHostKeyChecking=no" \
+                 --ssh-flag="-o UserKnownHostsFile=/dev/null" \
+                 --ssh-flag="-o BatchMode=yes" \
+                 --ssh-flag="-o ConnectTimeout=20" \
+                 --command="echo polaczenie-ok"; then
+              echo "Polaczenie dziala (proba $i)"
+              exit 0
+            fi
+            echo "Proba $i nieudana, czekam 15 s (klucz OS Login moze sie jeszcze propagowac)..."
+            sleep 15
+          done
+          echo "Nie udalo sie polaczyc z maszyna przez IAP."
+          echo "Sprawdz: reguly firewalla dla 35.235.240.0/20 oraz role konta uslugowego."
+          exit 1
+
+      - name: Wyslanie na maszyne
+        timeout-minutes: 5
+        run: |
+          timeout 240 gcloud compute scp /tmp/stock-dashboard.tar.gz \
             "${{ vars.GCP_VM_NAME }}":~/release.tar.gz \
-            --zone "${{ vars.GCP_ZONE }}" --tunnel-through-iap --quiet
+            --zone "${{ vars.GCP_ZONE }}" --tunnel-through-iap --quiet \
+            --scp-flag="-o StrictHostKeyChecking=no" \
+            --scp-flag="-o UserKnownHostsFile=/dev/null" \
+            --scp-flag="-o BatchMode=yes" \
+            --scp-flag="-o ConnectTimeout=20"
 
       # Staging dostaje sanityzowana kopie produkcji: prawdziwy ksztalt danych,
       # zadnych dzialajacych poswiadczen.
       # release.sh bierzemy Z PACZKI, a nie z /opt - inaczej nowe wydanie byloby
       # instalowane skryptem ze starej wersji.
       - name: Wydanie na staging
+        timeout-minutes: 6
         run: |
           gcloud compute ssh "${{ vars.GCP_VM_NAME }}" \
             --zone "${{ vars.GCP_ZONE }}" --tunnel-through-iap --quiet \
+            --ssh-flag="-o StrictHostKeyChecking=no" \
+            --ssh-flag="-o UserKnownHostsFile=/dev/null" \
+            --ssh-flag="-o BatchMode=yes" \
+            --ssh-flag="-o ConnectTimeout=20" \
             --command 'set -e; W=$(mktemp -d); tar -xzf ~/release.tar.gz -C "$W"; sudo bash "$W/stock-dashboard/deploy/gcp/release.sh" ~/release.tar.gz staging; rm -rf "$W"'
 
       - name: Smoke test stagingu
+        timeout-minutes: 3
         run: |
           gcloud compute ssh "${{ vars.GCP_VM_NAME }}" \
             --zone "${{ vars.GCP_ZONE }}" --tunnel-through-iap --quiet \
@@ -83,9 +117,14 @@ jobs:
       # Produkcja: release.sh sam robi kopie zapasowa, probe generalna migracji
       # i cofa sie do poprzedniej wersji, jesli health check nie przejdzie.
       - name: Wydanie na produkcje
+        timeout-minutes: 6
         run: |
           gcloud compute ssh "${{ vars.GCP_VM_NAME }}" \
             --zone "${{ vars.GCP_ZONE }}" --tunnel-through-iap --quiet \
+            --ssh-flag="-o StrictHostKeyChecking=no" \
+            --ssh-flag="-o UserKnownHostsFile=/dev/null" \
+            --ssh-flag="-o BatchMode=yes" \
+            --ssh-flag="-o ConnectTimeout=20" \
             --command 'set -e; W=$(mktemp -d); tar -xzf ~/release.tar.gz -C "$W"; sudo bash "$W/stock-dashboard/deploy/gcp/release.sh" ~/release.tar.gz production; rm -rf "$W"'
 
       - name: Weryfikacja publiczna

@@ -27,17 +27,13 @@ jobs:
     timeout-minutes: 20
     environment: production
 
-    # Jeden zestaw flag dla WSZYSTKICH wywolan ssh. Wczesniej czesc krokow go nie miala
-    # i mogla zawisnac na pytaniu o klucz hosta, ktorego nikt nie zobaczy.
-    # Zapis -oNazwa=wartosc (bez spacji) przezywa podzial slow w powloce.
+    # Cala rozmowa z maszyna idzie przez deploy/gcp/ci-ssh.sh: jeden zestaw flag,
+    # jedno ponawianie, jedno miejsce do poprawiania. Wczesniej kazdy krok mial
+    # wlasna wersje i tylko jeden z szesciu ponawial proby - reszta padala na
+    # pierwszym "Permission denied (publickey)" z OS Login.
     env:
-      SSH_FLAGS: >-
-        --ssh-flag=-oStrictHostKeyChecking=no
-        --ssh-flag=-oUserKnownHostsFile=/dev/null
-        --ssh-flag=-oBatchMode=yes
-        --ssh-flag=-oConnectTimeout=20
-        --ssh-flag=-oServerAliveInterval=15
-        --ssh-flag=-oServerAliveCountMax=4
+      VM: ${{ vars.GCP_VM_NAME }}
+      STREFA: ${{ vars.GCP_ZONE }}
 
     steps:
       - uses: actions/checkout@v5
@@ -67,107 +63,57 @@ jobs:
             --transform='s,^\.,stock-dashboard,' .
           ls -lh /tmp/stock-dashboard.tar.gz
 
-      # OS Login potrzebuje chwili na rozpropagowanie klucza konta uslugowego przy
-      # pierwszym polaczeniu. Sonda z krotkim limitem daje czytelny blad zamiast zawieszenia.
+      # Pierwsze polaczenie zaklada klucz w OS Login. Robimy je osobno, zeby ewentualny
+      # problem z uprawnieniami byl widoczny jako wlasny krok, a nie jako awaria wysylki.
       - name: Sprawdzenie polaczenia z maszyna
         timeout-minutes: 5
-        run: |
-          for i in $(seq 1 6); do
-            if timeout 45 gcloud compute ssh "${{ vars.GCP_VM_NAME }}" \
-                 --zone "${{ vars.GCP_ZONE }}" --tunnel-through-iap --quiet \
-                 $SSH_FLAGS --command="echo polaczenie-ok"; then
-              echo "Polaczenie dziala (proba $i)"
-              exit 0
-            fi
-            echo "Proba $i nieudana, czekam 15 s (klucz OS Login moze sie jeszcze propagowac)..."
-            sleep 15
-          done
-          echo "Nie udalo sie polaczyc z maszyna przez IAP."
-          echo "Sprawdz: reguly firewalla dla 35.235.240.0/20 oraz role konta uslugowego."
-          exit 1
+        run: bash deploy/gcp/ci-ssh.sh run "$VM" "$STREFA" 'echo polaczenie-ok'
 
-      # NIE uzywamy 'gcloud compute scp'. Od OpenSSH 9.0 scp przesyla dane podsystemem
-      # SFTP, a ten w polaczeniu z tunelem IAP potrafi zawisnac na glucho - runner ma
-      # OpenSSH 9.6, wiec trafia dokladnie w ten przypadek (obserwowane: kod 124 z timeout
-      # przy paczce 164 kB, czyli na pewno nie przepustowosc).
-      #
-      # Sonda powyzej udowodnila, ze 'ssh --command' dziala. Wysylamy wiec plik ta sama
-      # droga - strumieniem na standardowe wejscie. Flaga -T wylacza pseudoterminal;
-      # bez niej terminal przerobilby konce linii i paczka dotarlaby uszkodzona.
+      # Bez scp: od OpenSSH 9.0 przesyla on dane podsystemem SFTP, ktory przez tunel IAP
+      # potrafi zawisnac (obserwowane: kod 124 przy paczce 164 kB). ci-ssh.sh strumieniuje
+      # plik przez zwykle 'ssh --command' i sprawdza sume kontrolna po obu stronach.
       - name: Wyslanie na maszyne
-        timeout-minutes: 8
-        run: |
-          set -euo pipefail
-          ROZMIAR=$(stat -c%s /tmp/stock-dashboard.tar.gz)
-          SUMA_LOKALNA=$(sha256sum /tmp/stock-dashboard.tar.gz | cut -d' ' -f1)
-          echo "Paczka: $ROZMIAR B, sha256 ${SUMA_LOKALNA:0:16}..."
-
-          START=$(date +%s)
-          timeout 360 gcloud compute ssh "${{ vars.GCP_VM_NAME }}" \
-            --zone "${{ vars.GCP_ZONE }}" --tunnel-through-iap --quiet \
-            $SSH_FLAGS --ssh-flag=-T \
-            --command='cat > ~/release.tar.gz' < /tmp/stock-dashboard.tar.gz
-          echo "Przeslano w $(( $(date +%s) - START )) s"
-
-          # Bez tego sprawdzenia uszkodzona paczka wyszlaby na jaw dopiero przy
-          # rozpakowaniu na maszynie - juz po zatrzymaniu uslugi.
-          #
-          # UWAGA na 'set -e': nieudany grep w podstawieniu $(...) przerywa CALY krok,
-          # zanim zdazymy cokolwiek wypisac. Wtedy krok raportuje porazke mimo udanego
-          # przesylu, a w logu nie ma sladu dlaczego. Stad '|| true' i osobna diagnoza.
-          ODPOWIEDZ=$(timeout 60 gcloud compute ssh "${{ vars.GCP_VM_NAME }}" \
-            --zone "${{ vars.GCP_ZONE }}" --tunnel-through-iap --quiet \
-            $SSH_FLAGS --command='sha256sum ~/release.tar.gz' 2>&1 || true)
-          SUMA_ZDALNA=$(printf '%s' "$ODPOWIEDZ" | tr -d '\r' | grep -oE '[0-9a-f]{64}' | head -1 || true)
-
-          if [ -z "$SUMA_ZDALNA" ]; then
-            echo "Nie udalo sie odczytac sumy kontrolnej z maszyny."
-            echo "Surowa odpowiedz:"
-            printf '%s\n' "$ODPOWIEDZ" | sed 's/^/  | /'
-            exit 1
-          fi
-          if [ "$SUMA_LOKALNA" != "$SUMA_ZDALNA" ]; then
-            echo "Paczka dotarla uszkodzona."
-            echo "  lokalnie:    $SUMA_LOKALNA"
-            echo "  na maszynie: $SUMA_ZDALNA"
-            exit 1
-          fi
-          echo "Suma kontrolna na maszynie zgadza sie z lokalna."
+        timeout-minutes: 10
+        run: bash deploy/gcp/ci-ssh.sh send "$VM" "$STREFA" /tmp/stock-dashboard.tar.gz '~/release.tar.gz'
 
       # Staging dostaje sanityzowana kopie produkcji: prawdziwy ksztalt danych,
       # zadnych dzialajacych poswiadczen.
       # release.sh bierzemy Z PACZKI, a nie z /opt - inaczej nowe wydanie byloby
       # instalowane skryptem ze starej wersji.
+      #
+      # CI_SSH_PROBY=1: samego WYDANIA nie ponawiamy. Gdyby polaczenie zerwalo sie
+      # w polowie release.sh, druga proba zastalaby maszyne w stanie posrednim -
+      # a przy produkcji nadpisalaby /opt/stock-dashboard.old juz nowym kodem,
+      # kasujac to, do czego mielibysmy sie cofac. Czysta porazka i swiadome
+      # powtorzenie przebiegu jest bezpieczniejsze niz automatyczna druga proba.
+      # Klucz OS Login jest juz o tym momencie sprawdzony trzema polaczeniami.
       - name: Wydanie na staging
-        timeout-minutes: 6
+        timeout-minutes: 10
+        env:
+          CI_SSH_PROBY: 1
         run: |
-          timeout 330 gcloud compute ssh "${{ vars.GCP_VM_NAME }}" \
-            --zone "${{ vars.GCP_ZONE }}" --tunnel-through-iap --quiet \
-            $SSH_FLAGS \
-            --command 'set -e; W=$(mktemp -d); tar -xzf ~/release.tar.gz -C "$W"; sudo bash "$W/stock-dashboard/deploy/gcp/release.sh" ~/release.tar.gz staging; rm -rf "$W"'
+          bash deploy/gcp/ci-ssh.sh run "$VM" "$STREFA" \
+            'set -e; W=$(mktemp -d); tar -xzf ~/release.tar.gz -C "$W"; sudo bash "$W/stock-dashboard/deploy/gcp/release.sh" ~/release.tar.gz staging; rm -rf "$W"'
 
       - name: Smoke test stagingu
-        timeout-minutes: 3
+        timeout-minutes: 5
         run: |
-          timeout 160 gcloud compute ssh "${{ vars.GCP_VM_NAME }}" \
-            --zone "${{ vars.GCP_ZONE }}" --tunnel-through-iap --quiet \
-            $SSH_FLAGS \
-            --command '
-              set -e
-              curl -fsS http://127.0.0.1:8788/stock-dashboard/api/v1/health | grep -q "\"ok\":true"
-              curl -fsS -o /dev/null -w "login.html %{http_code}\n" http://127.0.0.1:8788/stock-dashboard/login.html
-              echo "Staging odpowiada poprawnie"
-            '
+          bash deploy/gcp/ci-ssh.sh run "$VM" "$STREFA" '
+            set -e
+            curl -fsS http://127.0.0.1:8788/stock-dashboard/api/v1/health | grep -q "\"ok\":true"
+            curl -fsS -o /dev/null -w "login.html %{http_code}\n" http://127.0.0.1:8788/stock-dashboard/login.html
+            echo "Staging odpowiada poprawnie"
+          '
 
       # Produkcja: release.sh sam robi kopie zapasowa, probe generalna migracji
       # i cofa sie do poprzedniej wersji, jesli health check nie przejdzie.
       - name: Wydanie na produkcje
-        timeout-minutes: 6
+        timeout-minutes: 10
+        env:
+          CI_SSH_PROBY: 1 # patrz uzasadnienie przy wydaniu na staging
         run: |
-          timeout 330 gcloud compute ssh "${{ vars.GCP_VM_NAME }}" \
-            --zone "${{ vars.GCP_ZONE }}" --tunnel-through-iap --quiet \
-            $SSH_FLAGS \
-            --command 'set -e; W=$(mktemp -d); tar -xzf ~/release.tar.gz -C "$W"; sudo bash "$W/stock-dashboard/deploy/gcp/release.sh" ~/release.tar.gz production; rm -rf "$W"'
+          bash deploy/gcp/ci-ssh.sh run "$VM" "$STREFA" \
+            'set -e; W=$(mktemp -d); tar -xzf ~/release.tar.gz -C "$W"; sudo bash "$W/stock-dashboard/deploy/gcp/release.sh" ~/release.tar.gz production; rm -rf "$W"'
 
       - name: Weryfikacja publiczna
         run: |

@@ -181,6 +181,36 @@ Flaga `-T` jest obowiązkowa — bez niej pseudoterminal przerobi końce linii i
 
 Gdyby mimo to wisiało: sprawdź, czy wisi też zwykłe `vm --command 'echo test'`. Jeśli tak, problem jest w IAP albo OS Login, nie w przesyle — patrz sekcja o `actAs` powyżej.
 
+## CI: `Permission denied (publickey)` mimo poprawnych uprawnień
+
+```
+sa_1084...@compute.5301...: Permission denied (publickey).
+ERROR: (gcloud.compute.ssh) [/usr/bin/ssh] exited with return code [255].
+```
+
+To **nie** jest problem z IAM ani z firewallem — zwłaszcza jeśli krok „Sprawdzenie połączenia z maszyną" chwilę wcześniej przeszedł. OS Login rozpropagowuje klucz konta usługowego z opóźnieniem i bez gwarancji: połączenie, które działa teraz, cztery sekundy później bywa odrzucane.
+
+Odpowiedzią jest ponawianie, a nie zmiana uprawnień. Od sierpnia 2026 cała komunikacja idzie przez `deploy/gcp/ci-ssh.sh`, który ponawia sześć razy co dziesięć sekund i rozróżnia błąd przejściowy od trwałego (brak uprawnień, zła nazwa maszyny, nieudane polecenie — te nie są ponawiane).
+
+Ręcznie to samo:
+
+```bash
+bash deploy/gcp/ci-ssh.sh run  stock-dashboard us-central1-a 'echo test'
+bash deploy/gcp/ci-ssh.sh send stock-dashboard us-central1-a ./paczka.tar.gz '~/release.tar.gz'
+```
+
+Zmienne: `CI_SSH_PROBY` (domyślnie 6), `CI_SSH_PRZERWA` (10 s), `CI_SSH_LIMIT` (360 s).
+
+**Kroki „Wydanie na staging" i „Wydanie na produkcję" celowo mają `CI_SSH_PROBY=1`.** Ponowienie przerwanego w połowie `release.sh` nadpisałoby `/opt/stock-dashboard.old` już nowym kodem, kasując wersję, do której miałby nastąpić rollback. Przy przerwanym wydaniu lepsza jest czysta porażka i świadome powtórzenie przebiegu.
+
+Jeśli sześć prób nie wystarczy, sprawdź to, co naprawdę bywa trwałe:
+
+```bash
+gcloud compute os-login ssh-keys list --project portfel-dashboard
+gcloud compute instances describe stock-dashboard --zone us-central1-a \
+  --format='get(metadata.items[].key)'   # 'enable-oslogin' musi byc TRUE
+```
+
 ## CI: krok „Wydanie na staging" pada od razu
 
 Objaw: `EACCES: permission denied` w logu kroku, wydanie kończy się po kilku sekundach.

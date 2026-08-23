@@ -49,11 +49,22 @@ test('skrypty wdrozeniowe w ogole istnieja', () => {
 });
 
 test('kazdy skrypt przerywa sie na pierwszym bledzie', () => {
+  // ci-ssh.sh jest jedynym wyjatkiem i to swiadomym: jego zadaniem jest BADANIE
+  // kodow wyjscia nieudanych prob, zeby odroznic blad przejsciowy od trwalego.
+  // Z 'set -e' zakonczylby sie na pierwszej odrzuconej probie, czyli dokladnie tam,
+  // gdzie ma zaczac dzialac. Nadal wymagamy od niego '-u' i 'pipefail'.
+  const bezE = new Set(['ci-ssh.sh']);
+
   for (const file of scripts) {
-    assert.match(
-      read(file), /set -euo pipefail/,
-      `${file}: bez 'set -euo pipefail' bledny krok przejdzie niezauwazony`,
-    );
+    const source = read(file);
+    if (bezE.has(file)) {
+      assert.match(source, /set -uo pipefail/, `${file}: wymagane co najmniej 'set -uo pipefail'`);
+      assert.doesNotMatch(source, /set -euo pipefail/,
+        `${file}: 'set -e' zlamalby obsluge ponowien - jesli to celowa zmiana, usun plik z listy wyjatkow`);
+      continue;
+    }
+    assert.match(source, /set -euo pipefail/,
+      `${file}: bez 'set -euo pipefail' bledny krok przejdzie niezauwazony`);
   }
 });
 
@@ -92,6 +103,60 @@ test('kazdy zapis do katalogu danych jest poprzedzony ustaleniem wlasciciela', (
   const chown = source.search(/chown -R "\$APP_USER:\$APP_USER" "\$STAGING_DATA"/);
   assert.ok(mkdir > -1 && chown > mkdir,
     'chown musi nastapic po mkdir (ktory tworzy katalog jako root) i przed uzyciem');
+});
+
+// ---------------------------------------------------------------- awaria z 23.08.2026, runda 2
+
+test('workflow rozmawia z maszyna wylacznie przez ci-ssh.sh', () => {
+  // OS Login odrzuca polaczenia losowo, dopoki nie rozpropaguje klucza konta uslugowego
+  // ("Permission denied (publickey)" mimo poprawnych uprawnien). Ponawianie musi byc
+  // w KAZDYM kroku - wczesniej mial je tylko jeden z szesciu i to on jako jedyny przechodzil.
+  const workflow = fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'deploy.yml'), 'utf8');
+  const bezposrednie = workflow
+    .split('\n')
+    .filter((line) => !line.trim().startsWith('#'))
+    .filter((line) => line.includes('gcloud compute ssh') || line.includes('gcloud compute scp'));
+  assert.deepEqual(bezposrednie, [],
+    `krok omija ci-ssh.sh, wiec nie ponawia prob:\n  ${bezposrednie.join('\n  ')}`);
+});
+
+test('ci-ssh ponawia bledy polaczenia, ale nie bledy trwale', () => {
+  const source = read('ci-ssh.sh');
+  assert.match(source, /Permission denied \\\(publickey\\\)/,
+    'brak wzorca na awarie OS Login - to ona wywracala wdrozenie');
+  assert.match(source, /przejsciowy\(\)/, 'brak rozroznienia bledow przejsciowych od trwalych');
+  assert.match(source, /nie ponawiam/, 'blad trwaly musi konczyc sie od razu, bez czekania');
+});
+
+test('ponawiana wysylka otwiera plik od nowa przy kazdej probie', () => {
+  // Gdyby stdin byl podpiety raz, poza petla, druga proba wyslalaby pusty strumien
+  // i na maszynie wyladowalaby uszkodzona paczka - z poprawnym kodem wyjscia.
+  const source = joinContinuations(read('ci-ssh.sh'));
+  const petla = source.slice(source.indexOf('for (( proba'), source.indexOf('return "$kod"'));
+  assert.match(petla, /--command="\$polecenie" < "\$plik"/,
+    'przekierowanie pliku musi byc WEWNATRZ petli ponowien');
+});
+
+test('wysylka zawsze weryfikuje sume kontrolna', () => {
+  const source = read('ci-ssh.sh');
+  assert.match(source, /SUMA_LOKALNA/, 'brak sumy lokalnej');
+  assert.match(source, /SUMA_ZDALNA/, 'brak sumy z maszyny');
+  assert.match(source, /paczka dotarla uszkodzona/i, 'brak reakcji na niezgodnosc sum');
+  // Nieudany grep w podstawieniu potrafi zabic krok, zanim cokolwiek wypiszemy.
+  assert.match(source, /grep -oE '\[0-9a-f\]\{64\}' \| head -1 \|\| true/,
+    "odczyt sumy musi konczyc sie '|| true', inaczej krok pada bez diagnozy");
+});
+
+test('samo wydanie nie jest ponawiane automatycznie', () => {
+  // Ponowienie przerwanego release.sh nadpisaloby /opt/stock-dashboard.old nowym kodem,
+  // czyli skasowaloby wersje, do ktorej mielibysmy sie cofac.
+  const workflow = fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'deploy.yml'), 'utf8');
+  for (const krok of ['Wydanie na staging', 'Wydanie na produkcje']) {
+    const idx = workflow.indexOf(`name: ${krok}`);
+    assert.ok(idx > -1, `brak kroku: ${krok}`);
+    const blok = workflow.slice(idx, idx + 600);
+    assert.match(blok, /CI_SSH_PROBY:\s*1/, `${krok}: wydanie nie moze byc ponawiane automatycznie`);
+  }
 });
 
 // ---------------------------------------------------------------- bramki produkcyjne

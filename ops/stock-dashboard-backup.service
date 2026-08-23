@@ -1,0 +1,8 @@
+[Unit]
+Description=Kopia zapasowa bazy Master Portfolio Dashboard
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/apps/stock-dashboard
+EnvironmentFile=%h/apps/stock-dashboard/.env
+ExecStart=/usr/bin/node %h/apps/stock-dashboard/scripts/admin.mjs backup

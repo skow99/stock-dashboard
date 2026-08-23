@@ -1,0 +1,785 @@
+// public/i18n.js - warstwa tlumaczen interfejsu / UI translation layer (pl, en).
+//
+// Zasady / Rules:
+// - teksty statyczne w HTML oznacza sie atrybutem data-i18n (albo -title / -placeholder),
+// - teksty generowane w JS pobiera sie przez t('klucz', { param }),
+// - komunikaty bledow API tlumaczy sie po STABILNYM error.code, a nie po tresci.
+
+export const LOCALES = ['pl', 'en'];
+export const DEFAULT_LOCALE = 'pl';
+const STORAGE_KEY = 'mpd.v2.locale';
+
+export const LOCALE_LABELS = { pl: 'Polski', en: 'English' };
+const INTL = { pl: 'pl-PL', en: 'en-GB' };
+
+const DICT = {
+  pl: {
+    // ---- ogolne
+    'app.title': 'Master Portfolio Dashboard',
+    'app.loading': 'Ladowanie...',
+    'app.refresh': 'Odswiez',
+    'app.refreshTitle': 'Odswiez dane rynkowe',
+    'app.portfolios': 'Portfele',
+    'app.portfoliosTitle': 'Zarzadzaj portfelami',
+    'app.account': 'Konto',
+    'app.accountTitle': 'Konto i ustawienia',
+    'app.language': 'Jezyk',
+    'app.allPortfolios': 'Wszystkie portfele',
+    'app.selectPortfolio': 'Wybor portfela',
+    'app.updated': 'Aktualizacja',
+    'app.cache': 'cache {seconds}s',
+    'app.offlineMode': 'tryb offline',
+    'app.quotes': 'notowania {fresh}/{total}',
+    'app.save': 'Zapisz',
+    'app.add': 'Dodaj',
+    'app.cancel': 'Anuluj',
+    'app.edit': 'Edytuj',
+    'app.delete': 'Usun',
+    'app.clear': 'Wyczysc',
+    'app.all': 'Wszystkie',
+    'app.none': 'brak',
+    'app.yes': 'tak',
+    'app.optional': 'opcjonalnie',
+    'app.copyNow': 'Skopiuj teraz',
+
+    // ---- logowanie
+    'auth.checking': 'Sprawdzanie stanu instalacji...',
+    'auth.signInPrompt': 'Zaloguj sie, zeby zobaczyc swoje portfele.',
+    'auth.signIn': 'Zaloguj',
+    'auth.signOut': 'Wyloguj',
+    'auth.signOutEverywhere': 'Wyloguj wszedzie',
+    'auth.signedIn': 'Zalogowano',
+    'auth.email': 'E-mail',
+    'auth.password': 'Haslo',
+    'auth.displayName': 'Nazwa wyswietlana',
+    'auth.inviteCode': 'Kod zaproszenia',
+    'auth.inviteHint': 'Kod otrzymasz od administratora instancji.',
+    'auth.passwordHint': 'Min. 10 znakow, co najmniej 3 z 4: male litery, wielkie litery, cyfry, znaki specjalne.',
+    'auth.register': 'Zaloz konto',
+    'auth.registerOpen': 'Rejestracja jest otwarta na tej instancji.',
+    'auth.registerInvite': 'Rejestracja wymaga waznego kodu zaproszenia.',
+    'auth.toRegister': 'Masz kod zaproszenia? Zaloz konto',
+    'auth.toLogin': 'Masz juz konto? Zaloguj sie',
+    'auth.bootstrapTitle': 'Pierwsze uruchomienie',
+    'auth.bootstrapLead': 'Utworz konto wlasciciela instancji. Kolejne konta beda wymagac zaproszenia.',
+    'auth.bootstrapSubmit': 'Utworz konto wlasciciela',
+    'auth.serverUnavailable': 'Serwer niedostepny: {error}',
+    'auth.sessionExpired': 'Sesja wygasla',
+
+    // ---- karty
+    'card.totalValue': 'Wartosc calosci',
+    'card.day': 'Dzien',
+    'card.mtd': 'MTD',
+    'card.ytd': 'YTD',
+    'card.sinceStart': 'Wynik od startu',
+    'card.sinceStartSub': 'bez depozytow, od {day}',
+    'card.netDeposits': 'Netto wplaty',
+    'card.netDepositsSub': 'wplaty minus wyplaty',
+    'card.returnOnCapital': 'Zwrot z kapitalu',
+    'card.returnOnCapitalSub': 'wartosc / netto wplaty',
+    'card.invested': 'Zainwestowane',
+    'card.investedSub': '{pct} portfela',
+    'card.cash': 'Gotowka',
+    'card.realized': 'Zrealizowany wynik',
+    'card.tax': 'Podatek {year}',
+    'card.taxSub': 'szacunek, {rate} od zysku',
+    'card.dividends': 'Dywidendy',
+    'card.dividendsSub': 'wplywy z dywidend i odsetek',
+    'card.top5': 'Koncentracja Top 5',
+    'card.top5Sub': 'udzial 5 najwiekszych pozycji',
+    'card.perfSub': '{pct} od {day}',
+    'card.noHistory': 'brak historii',
+    'card.portfolioCount': '{count} portfeli',
+    'card.createdAt': 'Konto od',
+    'card.lastLogin': 'Ostatnie logowanie',
+    'card.role': 'Rola',
+    'card.name': 'Nazwa',
+
+    // ---- zakladki
+    'tab.portfolio': 'Portfel',
+    'tab.transactions': 'Historia transakcji',
+    'tab.closed': 'Zamkniete pozycje',
+    'tab.cash': 'Przeplywy gotowki',
+    'tab.perTicker': 'Wynik per ticker',
+    'tab.manage': 'Portfele',
+    'tab.account': 'Konto',
+
+    // ---- wykresy i sekcje
+    'section.breakdown': 'Podzial na portfele',
+    'section.portfolioValue': 'Wartosc portfela',
+    'section.twr': 'Indeks portfela (TWR) vs benchmarki',
+    'section.twrHint': 'Baza 100 na poczatku zakresu, po odjeciu wplat i wyplat',
+    'section.sectors': 'Ekspozycja sektorowa',
+    'section.positions': 'Pozycje',
+    'section.instrument': 'Kurs instrumentu',
+    'section.realizedOverTime': 'Zrealizowany wynik w czasie',
+    'section.perTicker': 'Wynik per ticker',
+    'section.newPortfolio': 'Nowy portfel',
+    'section.yourPortfolios': 'Twoje portfele',
+    'section.shareLinks': 'Linki tylko do odczytu',
+    'section.shareHint': 'Kazdy, kto ma link, zobaczy dane bez logowania. Link mozna uniewaznic w dowolnym momencie.',
+    'section.changePassword': 'Zmiana hasla',
+    'section.changePasswordHint': 'Zmiana hasla wylogowuje wszystkie sesje.',
+    'section.sessions': 'Aktywne sesje',
+    'section.invites': 'Administracja - zaproszenia',
+    'section.invitesHint': 'Rejestracja nowych kont jest mozliwa wylacznie z waznym kodem zaproszenia.',
+    'section.addTransaction': 'Dodaj transakcje',
+    'section.editTransaction': 'Edytuj transakcje {ticker}',
+    'section.transactionHistory': 'Historia transakcji',
+    'section.addCashFlow': 'Dodaj przeplyw gotowki',
+    'section.editCashFlow': 'Edytuj przeplyw',
+    'section.cashFlows': 'Przeplywy',
+
+    'meta.points': 'Punkty',
+    'meta.range': 'Zakres',
+    'meta.last': 'Ostatni',
+    'meta.max': 'Max',
+    'meta.change': 'Zmiana',
+    'meta.exDeposits': 'Po odjeciu wplat',
+    'meta.start': 'Start',
+    'meta.end': 'Koniec',
+    'meta.source': 'Zrodlo',
+    'meta.status': 'Status',
+    'meta.intraday': 'intraday',
+    'meta.noHistory': 'brak historii',
+    'meta.noData': 'brak danych',
+    'meta.notEnoughTwr': 'za malo historii do indeksu TWR',
+    'meta.ownTransactions': 'wlasne transakcje',
+    'chart.notEnoughData': 'Za malo danych do wykresu',
+    'chart.noData': 'Brak danych',
+    'chart.noRealized': 'Brak zrealizowanych wynikow',
+    'chart.rangeHistory': 'Zakres historii',
+    'chart.rangeInstrument': 'Zakres wykresu instrumentu',
+    'chart.pickInstrument': 'wybierz z tabeli',
+    'chart.portfolio': 'Portfel',
+
+    // ---- tabele
+    'col.portfolio': 'Portfel',
+    'col.value': 'Wartosc',
+    'col.invested': 'Zainwestowane',
+    'col.cash': 'Gotowka',
+    'col.positions': 'Pozycje',
+    'col.realized': 'Wynik zrealizowany',
+    'col.share': 'Udzial',
+    'col.company': 'Spolka',
+    'col.changePct': 'Zmiana %',
+    'col.result': 'Wynik',
+    'col.price': 'Kurs',
+    'col.qty': 'Ilosc',
+    'col.plan': 'Plan',
+    'col.stop': 'Stop',
+    'col.sector': 'Sektor',
+    'col.note': 'Notatka',
+    'col.date': 'Data',
+    'col.ticker': 'Ticker',
+    'col.type': 'Typ',
+    'col.amount': 'Kwota',
+    'col.currency': 'Waluta',
+    'col.operationValue': 'Wartosc',
+    'col.operationValuePln': 'Wartosc (PLN)',
+    'col.resultPln': 'Wynik (PLN)',
+    'col.resultPct': 'Wynik %',
+    'col.actions': 'Akcje',
+    'col.closedOn': 'Data zamkniecia',
+    'col.avgBuy': 'Sr. BUY',
+    'col.avgSell': 'Sr. SELL',
+    'col.comment': 'Komentarz',
+    'col.source': 'Zrodlo',
+    'col.trades': 'Transakcje',
+    'col.broker': 'Broker',
+    'col.webhook': 'Webhook',
+    'col.label': 'Etykieta',
+    'col.scope': 'Zakres',
+    'col.validUntil': 'Wazny do',
+    'col.views': 'Odslony',
+    'col.signedInAt': 'Zalogowano',
+    'col.lastActivity': 'Ostatnia aktywnosc',
+    'col.ip': 'IP',
+    'col.browser': 'Przegladarka',
+    'col.thisSession': 'Ta sesja',
+    'col.id': 'ID',
+    'col.email': 'E-mail',
+    'col.status': 'Status',
+    'col.name': 'Nazwa',
+    'col.fee': 'Prowizja',
+    'col.total': 'Razem',
+
+    'table.noPositions': 'Brak pozycji w tym zakresie',
+    'table.noTransactions': 'Brak transakcji',
+    'table.noClosed': 'Brak zamknietych pozycji',
+    'table.noFlows': 'Brak przeplywow',
+    'table.noRealized': 'Brak zrealizowanych wynikow',
+    'table.noSectors': 'Brak pozycji do podzialu sektorowego',
+    'table.noLinks': 'Brak linkow',
+    'table.noInvites': 'Brak zaproszen',
+    'table.positionCount': '{count} pozycji',
+    'table.transactionCount': '{count} transakcji',
+    'table.entryCount': '{count} wpisow',
+
+    // ---- formularze
+    'form.region': 'Filtr regionu',
+    'form.regionEurope': 'Europa',
+    'form.regionUsa': 'USA',
+    'form.downloadCsv': 'Pobierz CSV',
+    'form.filterPlaceholder': 'Filtruj po tickerze lub nazwie',
+    'form.tickerPlaceholder': 'GPW.WA',
+    'form.writesTo': 'Zapis do: {portfolio}',
+    'form.pickPortfolioFirst': 'Wybierz konkretny portfel w naglowku, zeby dodawac wpisy.',
+    'form.noteReadOnlyInAll': 'Notatki edytuj w widoku pojedynczego portfela',
+    'form.portfolioNamePlaceholder': 'np. IKE, Konto XTB',
+    'form.brokerPlaceholder': 'XTB / IBKR / mBank',
+    'form.baseCurrency': 'Waluta bazowa',
+    'form.color': 'Kolor',
+    'form.create': 'Utworz',
+    'form.currentPassword': 'Aktualne haslo',
+    'form.newPassword': 'Nowe haslo',
+    'form.changePassword': 'Zmien haslo',
+
+    'kind.brokerage': 'Maklerski',
+    'kind.ike': 'IKE',
+    'kind.ikze': 'IKZE',
+    'kind.pension': 'Emerytalny',
+    'kind.crypto': 'Krypto',
+    'kind.other': 'Inny',
+
+    'flow.Deposit': 'Wplata',
+    'flow.Withdrawal': 'Wyplata',
+    'flow.Dividend': 'Dywidenda',
+    'flow.Interest': 'Odsetki',
+    'flow.Fee': 'Prowizja',
+    'flow.Tax': 'Podatek',
+
+    // ---- akcje i komunikaty
+    'action.archive': 'Archiwizuj',
+    'action.restore': 'Przywroc',
+    'action.webhookToken': 'Token webhooka',
+    'action.export': 'Eksport',
+    'action.revoke': 'Uniewaznij',
+    'action.newLink': 'Utworz link',
+    'action.newInvite': 'Wygeneruj kod zaproszenia',
+    'scope.summary': 'podsumowanie',
+    'scope.full': 'pelny',
+    'share.noExpiry': 'bezterminowy',
+    'invite.anyEmail': 'dowolny',
+    'invite.status.active': 'aktywne',
+    'invite.status.used': 'uzyte',
+    'invite.status.expired': 'wygasle',
+    'webhook.active': 'aktywny',
+
+    'toast.portfolioCreated': 'Utworzono portfel "{name}"',
+    'toast.portfolioUpdated': 'Portfel zaktualizowany',
+    'toast.portfolioDeleted': 'Usunieto portfel ({count} transakcji)',
+    'toast.transactionAdded': 'Transakcja dodana',
+    'toast.transactionUpdated': 'Transakcja zaktualizowana',
+    'toast.transactionDeleted': 'Transakcja usunieta',
+    'toast.flowAdded': 'Przeplyw dodany',
+    'toast.flowUpdated': 'Przeplyw zaktualizowany',
+    'toast.flowDeleted': 'Przeplyw usuniety',
+    'toast.linkRevoked': 'Link uniewazniony',
+    'toast.passwordChanged': 'Haslo zmienione. Zaloguj sie ponownie.',
+    'toast.noteFailed': 'Nie zapisano notatki: {error}',
+    'toast.loadFailed': 'Nie udalo sie pobrac danych: {error}',
+    'toast.historyUnavailable': 'Historia kursu niedostepna: {error}',
+
+    'confirm.deleteTransaction': 'Usunac transakcje?\n\n{label}',
+    'confirm.deleteFlow': 'Usunac przeplyw {date} {type} {amount} {currency}?',
+    'confirm.deletePortfolio': 'Usuniecie portfela kasuje WSZYSTKIE jego transakcje i przeplywy.\nWpisz dokladna nazwe, zeby potwierdzic:',
+    'confirm.rotateWebhook': 'Wygenerowac nowy token webhooka dla "{name}"? Poprzedni przestanie dzialac.',
+    'confirm.logoutAll': 'Wylogowac wszystkie urzadzenia?',
+    'prompt.webhookToken': 'Token webhooka (zapisz teraz, nie bedzie pokazany ponownie):',
+    'prompt.inviteCode': 'Kod zaproszenia (wazny 72h, pokazany tylko raz):',
+    'prompt.shareScope': 'Zakres linku: wpisz "all" dla wszystkich portfeli albo zostaw puste dla aktualnego portfela',
+    'prompt.shareLabel': 'Etykieta linku (opcjonalnie)',
+    'prompt.shareUrl': 'Link tylko do odczytu (skopiuj teraz):',
+
+    'banner.noPortfolios': 'Nie masz jeszcze zadnego portfela. Przejdz do zakladki "Portfele" i utworz pierwszy.',
+    'banner.historyBlocked': 'Historia EOD nie jest zapisywana: swiezych notowan {fresh}/{total} (wymagane 80%).',
+    'banner.warning': 'Uwaga: {message}',
+    'banner.providersDown': 'Zrodla danych chwilowo niedostepne: {list}. Uzywam cache.',
+    'banner.priceStale': 'nieswieze',
+
+    'noteKey.webhookTokenShownOnce': 'Zapisz token teraz - nie bedzie mozliwy do odczytania ponownie.',
+    'noteKey.shareLinkIsPublic': 'Kazdy, kto ma ten link, zobaczy dane w trybie tylko do odczytu.',
+    'noteKey.inviteCodeShownOnce': 'Kod jest pokazywany tylko raz.',
+
+    // ---- widok publiczny
+    'share.title': 'Widok tylko do odczytu',
+    'share.pageTitle': 'Portfel - widok tylko do odczytu',
+    'share.asOf': 'Dane na {time} | tylko do odczytu',
+    'share.missingToken': 'Brak tokenu w adresie. Uzyj pelnego linku otrzymanego od wlasciciela portfela.',
+    'share.invalid': 'Link jest niewazny: {error}',
+    'share.portfolios': 'Portfele',
+  },
+
+  en: {
+    // ---- general
+    'app.title': 'Master Portfolio Dashboard',
+    'app.loading': 'Loading…',
+    'app.refresh': 'Refresh',
+    'app.refreshTitle': 'Refresh market data',
+    'app.portfolios': 'Portfolios',
+    'app.portfoliosTitle': 'Manage portfolios',
+    'app.account': 'Account',
+    'app.accountTitle': 'Account and settings',
+    'app.language': 'Language',
+    'app.allPortfolios': 'All portfolios',
+    'app.selectPortfolio': 'Portfolio selection',
+    'app.updated': 'Updated',
+    'app.cache': 'cached {seconds}s',
+    'app.offlineMode': 'offline mode',
+    'app.quotes': 'quotes {fresh}/{total}',
+    'app.save': 'Save',
+    'app.add': 'Add',
+    'app.cancel': 'Cancel',
+    'app.edit': 'Edit',
+    'app.delete': 'Delete',
+    'app.clear': 'Clear',
+    'app.all': 'All',
+    'app.none': 'none',
+    'app.yes': 'yes',
+    'app.optional': 'optional',
+    'app.copyNow': 'Copy it now',
+
+    // ---- sign-in
+    'auth.checking': 'Checking installation state…',
+    'auth.signInPrompt': 'Sign in to see your portfolios.',
+    'auth.signIn': 'Sign in',
+    'auth.signOut': 'Sign out',
+    'auth.signOutEverywhere': 'Sign out everywhere',
+    'auth.signedIn': 'Signed in',
+    'auth.email': 'Email',
+    'auth.password': 'Password',
+    'auth.displayName': 'Display name',
+    'auth.inviteCode': 'Invitation code',
+    'auth.inviteHint': 'Ask the instance administrator for a code.',
+    'auth.passwordHint': 'At least 10 characters, and 3 of 4: lowercase, uppercase, digits, symbols.',
+    'auth.register': 'Create account',
+    'auth.registerOpen': 'Registration is open on this instance.',
+    'auth.registerInvite': 'Registration requires a valid invitation code.',
+    'auth.toRegister': 'Have an invitation code? Create an account',
+    'auth.toLogin': 'Already have an account? Sign in',
+    'auth.bootstrapTitle': 'First run',
+    'auth.bootstrapLead': 'Create the instance owner account. Further accounts will require an invitation.',
+    'auth.bootstrapSubmit': 'Create owner account',
+    'auth.serverUnavailable': 'Server unavailable: {error}',
+    'auth.sessionExpired': 'Session expired',
+
+    // ---- cards
+    'card.totalValue': 'Total value',
+    'card.day': 'Day',
+    'card.mtd': 'MTD',
+    'card.ytd': 'YTD',
+    'card.sinceStart': 'Result since start',
+    'card.sinceStartSub': 'excluding deposits, from {day}',
+    'card.netDeposits': 'Net deposits',
+    'card.netDepositsSub': 'deposits minus withdrawals',
+    'card.returnOnCapital': 'Return on capital',
+    'card.returnOnCapitalSub': 'value / net deposits',
+    'card.invested': 'Invested',
+    'card.investedSub': '{pct} of portfolio',
+    'card.cash': 'Cash',
+    'card.realized': 'Realised result',
+    'card.tax': 'Tax {year}',
+    'card.taxSub': 'estimate, {rate} of gains',
+    'card.dividends': 'Dividends',
+    'card.dividendsSub': 'dividend and interest income',
+    'card.top5': 'Top 5 concentration',
+    'card.top5Sub': 'share of the 5 largest positions',
+    'card.perfSub': '{pct} since {day}',
+    'card.noHistory': 'no history',
+    'card.portfolioCount': '{count} portfolios',
+    'card.createdAt': 'Member since',
+    'card.lastLogin': 'Last sign-in',
+    'card.role': 'Role',
+    'card.name': 'Name',
+
+    // ---- tabs
+    'tab.portfolio': 'Portfolio',
+    'tab.transactions': 'Transactions',
+    'tab.closed': 'Closed positions',
+    'tab.cash': 'Cash flows',
+    'tab.perTicker': 'Result per ticker',
+    'tab.manage': 'Portfolios',
+    'tab.account': 'Account',
+
+    // ---- charts and sections
+    'section.breakdown': 'Breakdown by portfolio',
+    'section.portfolioValue': 'Portfolio value',
+    'section.twr': 'Portfolio index (TWR) vs benchmarks',
+    'section.twrHint': 'Rebased to 100 at the start of the range, net of deposits and withdrawals',
+    'section.sectors': 'Sector exposure',
+    'section.positions': 'Positions',
+    'section.instrument': 'Instrument price',
+    'section.realizedOverTime': 'Realised result over time',
+    'section.perTicker': 'Result per ticker',
+    'section.newPortfolio': 'New portfolio',
+    'section.yourPortfolios': 'Your portfolios',
+    'section.shareLinks': 'Read-only links',
+    'section.shareHint': 'Anyone with the link can view the data without signing in. Links can be revoked at any time.',
+    'section.changePassword': 'Change password',
+    'section.changePasswordHint': 'Changing your password signs out every session.',
+    'section.sessions': 'Active sessions',
+    'section.invites': 'Administration — invitations',
+    'section.invitesHint': 'New accounts can only be created with a valid invitation code.',
+    'section.addTransaction': 'Add transaction',
+    'section.editTransaction': 'Edit transaction {ticker}',
+    'section.transactionHistory': 'Transaction history',
+    'section.addCashFlow': 'Add cash flow',
+    'section.editCashFlow': 'Edit cash flow',
+    'section.cashFlows': 'Cash flows',
+
+    'meta.points': 'Points',
+    'meta.range': 'Range',
+    'meta.last': 'Last',
+    'meta.max': 'Max',
+    'meta.change': 'Change',
+    'meta.exDeposits': 'Excluding deposits',
+    'meta.start': 'Start',
+    'meta.end': 'End',
+    'meta.source': 'Source',
+    'meta.status': 'Status',
+    'meta.intraday': 'intraday',
+    'meta.noHistory': 'no history',
+    'meta.noData': 'no data',
+    'meta.notEnoughTwr': 'not enough history for the TWR index',
+    'meta.ownTransactions': 'own transactions',
+    'chart.notEnoughData': 'Not enough data to draw a chart',
+    'chart.noData': 'No data',
+    'chart.noRealized': 'No realised results',
+    'chart.rangeHistory': 'History range',
+    'chart.rangeInstrument': 'Instrument chart range',
+    'chart.pickInstrument': 'pick one from the table',
+    'chart.portfolio': 'Portfolio',
+
+    // ---- tables
+    'col.portfolio': 'Portfolio',
+    'col.value': 'Value',
+    'col.invested': 'Invested',
+    'col.cash': 'Cash',
+    'col.positions': 'Positions',
+    'col.realized': 'Realised result',
+    'col.share': 'Weight',
+    'col.company': 'Company',
+    'col.changePct': 'Change %',
+    'col.result': 'Result',
+    'col.price': 'Price',
+    'col.qty': 'Quantity',
+    'col.plan': 'Plan',
+    'col.stop': 'Stop',
+    'col.sector': 'Sector',
+    'col.note': 'Note',
+    'col.date': 'Date',
+    'col.ticker': 'Ticker',
+    'col.type': 'Type',
+    'col.amount': 'Amount',
+    'col.currency': 'Currency',
+    'col.operationValue': 'Value',
+    'col.operationValuePln': 'Value (PLN)',
+    'col.resultPln': 'Result (PLN)',
+    'col.resultPct': 'Result %',
+    'col.actions': 'Actions',
+    'col.closedOn': 'Closed on',
+    'col.avgBuy': 'Avg BUY',
+    'col.avgSell': 'Avg SELL',
+    'col.comment': 'Comment',
+    'col.source': 'Source',
+    'col.trades': 'Trades',
+    'col.broker': 'Broker',
+    'col.webhook': 'Webhook',
+    'col.label': 'Label',
+    'col.scope': 'Scope',
+    'col.validUntil': 'Valid until',
+    'col.views': 'Views',
+    'col.signedInAt': 'Signed in',
+    'col.lastActivity': 'Last activity',
+    'col.ip': 'IP',
+    'col.browser': 'Browser',
+    'col.thisSession': 'This session',
+    'col.id': 'ID',
+    'col.email': 'Email',
+    'col.status': 'Status',
+    'col.name': 'Name',
+    'col.fee': 'Fee',
+    'col.total': 'Total',
+
+    'table.noPositions': 'No positions in this scope',
+    'table.noTransactions': 'No transactions',
+    'table.noClosed': 'No closed positions',
+    'table.noFlows': 'No cash flows',
+    'table.noRealized': 'No realised results',
+    'table.noSectors': 'No positions to break down by sector',
+    'table.noLinks': 'No links',
+    'table.noInvites': 'No invitations',
+    'table.positionCount': '{count} positions',
+    'table.transactionCount': '{count} transactions',
+    'table.entryCount': '{count} entries',
+
+    // ---- forms
+    'form.region': 'Region filter',
+    'form.regionEurope': 'Europe',
+    'form.regionUsa': 'USA',
+    'form.downloadCsv': 'Download CSV',
+    'form.filterPlaceholder': 'Filter by ticker or name',
+    'form.tickerPlaceholder': 'GPW.WA',
+    'form.writesTo': 'Saving to: {portfolio}',
+    'form.pickPortfolioFirst': 'Pick a single portfolio in the header to add entries.',
+    'form.noteReadOnlyInAll': 'Edit notes in the single-portfolio view',
+    'form.portfolioNamePlaceholder': 'e.g. ISA, XTB account',
+    'form.brokerPlaceholder': 'XTB / IBKR / Degiro',
+    'form.baseCurrency': 'Base currency',
+    'form.color': 'Colour',
+    'form.create': 'Create',
+    'form.currentPassword': 'Current password',
+    'form.newPassword': 'New password',
+    'form.changePassword': 'Change password',
+
+    'kind.brokerage': 'Brokerage',
+    'kind.ike': 'IKE',
+    'kind.ikze': 'IKZE',
+    'kind.pension': 'Pension',
+    'kind.crypto': 'Crypto',
+    'kind.other': 'Other',
+
+    'flow.Deposit': 'Deposit',
+    'flow.Withdrawal': 'Withdrawal',
+    'flow.Dividend': 'Dividend',
+    'flow.Interest': 'Interest',
+    'flow.Fee': 'Fee',
+    'flow.Tax': 'Tax',
+
+    // ---- actions and messages
+    'action.archive': 'Archive',
+    'action.restore': 'Restore',
+    'action.webhookToken': 'Webhook token',
+    'action.export': 'Export',
+    'action.revoke': 'Revoke',
+    'action.newLink': 'Create link',
+    'action.newInvite': 'Generate invitation code',
+    'scope.summary': 'summary',
+    'scope.full': 'full',
+    'share.noExpiry': 'no expiry',
+    'invite.anyEmail': 'any',
+    'invite.status.active': 'active',
+    'invite.status.used': 'used',
+    'invite.status.expired': 'expired',
+    'webhook.active': 'active',
+
+    'toast.portfolioCreated': 'Created portfolio "{name}"',
+    'toast.portfolioUpdated': 'Portfolio updated',
+    'toast.portfolioDeleted': 'Portfolio deleted ({count} transactions)',
+    'toast.transactionAdded': 'Transaction added',
+    'toast.transactionUpdated': 'Transaction updated',
+    'toast.transactionDeleted': 'Transaction deleted',
+    'toast.flowAdded': 'Cash flow added',
+    'toast.flowUpdated': 'Cash flow updated',
+    'toast.flowDeleted': 'Cash flow deleted',
+    'toast.linkRevoked': 'Link revoked',
+    'toast.passwordChanged': 'Password changed. Please sign in again.',
+    'toast.noteFailed': 'Note not saved: {error}',
+    'toast.loadFailed': 'Could not load data: {error}',
+    'toast.historyUnavailable': 'Price history unavailable: {error}',
+
+    'confirm.deleteTransaction': 'Delete this transaction?\n\n{label}',
+    'confirm.deleteFlow': 'Delete cash flow {date} {type} {amount} {currency}?',
+    'confirm.deletePortfolio': 'Deleting a portfolio removes ALL its transactions and cash flows.\nType its exact name to confirm:',
+    'confirm.rotateWebhook': 'Generate a new webhook token for "{name}"? The previous one will stop working.',
+    'confirm.logoutAll': 'Sign out of every device?',
+    'prompt.webhookToken': 'Webhook token (save it now, it will not be shown again):',
+    'prompt.inviteCode': 'Invitation code (valid 72h, shown only once):',
+    'prompt.shareScope': 'Link scope: type "all" for every portfolio, or leave empty for the current one',
+    'prompt.shareLabel': 'Link label (optional)',
+    'prompt.shareUrl': 'Read-only link (copy it now):',
+
+    'banner.noPortfolios': 'You have no portfolios yet. Go to the "Portfolios" tab and create your first one.',
+    'banner.historyBlocked': 'EOD history is not being saved: {fresh}/{total} quotes are fresh (80% required).',
+    'banner.warning': 'Warning: {message}',
+    'banner.providersDown': 'Market data sources temporarily unavailable: {list}. Using cache.',
+    'banner.priceStale': 'stale',
+
+    'noteKey.webhookTokenShownOnce': 'Save the token now — it cannot be read again.',
+    'noteKey.shareLinkIsPublic': 'Anyone with this link can view the data read-only.',
+    'noteKey.inviteCodeShownOnce': 'The code is shown only once.',
+
+    // ---- public view
+    'share.title': 'Read-only view',
+    'share.pageTitle': 'Portfolio — read-only view',
+    'share.asOf': 'Data as of {time} | read-only',
+    'share.missingToken': 'No token in the address. Use the full link you received from the portfolio owner.',
+    'share.invalid': 'This link is not valid: {error}',
+    'share.portfolios': 'Portfolios',
+  },
+};
+
+/**
+ * Komunikaty bledow API tlumaczone po kodzie. Uzupelniaja tekst z serwera -
+ * dzieki temu UI mowi w jezyku interfejsu nawet, gdy serwer odpowiedzial inaczej.
+ */
+const ERRORS = {
+  pl: {
+    unauthorized: 'Wymagane zalogowanie',
+    forbidden: 'Brak uprawnien',
+    not_found: 'Nie znaleziono',
+    invalid_credentials: 'Niepoprawny e-mail lub haslo',
+    account_locked: 'Konto tymczasowo zablokowane po nieudanych probach logowania',
+    account_disabled: 'Konto jest zablokowane',
+    rate_limited: 'Zbyt wiele zapytan, sprobuj ponownie za chwile',
+    registration_closed: 'Rejestracja wylacznie na zaproszenie',
+    invalid_invite: 'Kod zaproszenia jest niepoprawny lub wygasl',
+    email_taken: 'Konto z tym adresem juz istnieje',
+    weak_password: 'Haslo nie spelnia wymagan: min. {min} znakow i co najmniej 3 z 4 grup znakow',
+    password_too_common: 'Haslo jest zbyt oczywiste',
+    invalid_password: 'Aktualne haslo jest niepoprawne',
+    invalid_email: 'Niepoprawny adres e-mail',
+    csrf_missing: 'Sesja wymaga odswiezenia strony',
+    csrf_invalid: 'Sesja wymaga odswiezenia strony',
+    portfolio_not_found: 'Portfel nie istnieje',
+    transaction_not_found: 'Transakcja nie istnieje',
+    flow_not_found: 'Przeplyw nie istnieje',
+    invalid_date: 'Pole {field} musi miec format RRRR-MM-DD',
+    invalid_number: 'Pole {field} musi byc liczba',
+    number_must_be_positive: 'Pole {field} musi byc dodatnie',
+    number_must_not_be_zero: 'Pole {field} nie moze byc zerem',
+    invalid_currency: 'Nieobslugiwana waluta',
+    invalid_side: 'Typ transakcji musi byc BUY albo SELL',
+    invalid_ticker: 'Ticker jest wymagany',
+    invalid_type: 'Nieobslugiwany typ przeplywu',
+    invalid_name: 'Nazwa jest wymagana (maks. {max} znakow)',
+    duplicate_transaction: 'Taka transakcja juz istnieje w portfelu',
+    duplicate_flow: 'Taki przeplyw juz istnieje w portfelu',
+    confirmation_required: 'Podaj dokladna nazwe portfela, zeby potwierdzic',
+    too_many_portfolios: 'Osiagnieto limit portfeli na konto',
+    internal_error: 'Blad serwera. Sprobuj ponownie.',
+  },
+  en: {
+    unauthorized: 'Sign-in required',
+    forbidden: 'Not permitted',
+    not_found: 'Not found',
+    invalid_credentials: 'Incorrect email or password',
+    account_locked: 'Account temporarily locked after failed sign-in attempts',
+    account_disabled: 'This account is disabled',
+    rate_limited: 'Too many requests, please try again shortly',
+    registration_closed: 'Registration is by invitation only',
+    invalid_invite: 'The invitation code is invalid or has expired',
+    email_taken: 'An account with this email already exists',
+    weak_password: 'Password does not meet the requirements: at least {min} characters and 3 of 4 character groups',
+    password_too_common: 'Password is too obvious',
+    invalid_password: 'Current password is incorrect',
+    invalid_email: 'Invalid email address',
+    csrf_missing: 'Please reload the page to refresh your session',
+    csrf_invalid: 'Please reload the page to refresh your session',
+    portfolio_not_found: 'Portfolio does not exist',
+    transaction_not_found: 'Transaction does not exist',
+    flow_not_found: 'Cash flow does not exist',
+    invalid_date: 'Field {field} must use the YYYY-MM-DD format',
+    invalid_number: 'Field {field} must be a number',
+    number_must_be_positive: 'Field {field} must be positive',
+    number_must_not_be_zero: 'Field {field} must not be zero',
+    invalid_currency: 'Unsupported currency',
+    invalid_side: 'Transaction side must be BUY or SELL',
+    invalid_ticker: 'Ticker is required',
+    invalid_type: 'Unsupported cash flow type',
+    invalid_name: 'Name is required (max {max} characters)',
+    duplicate_transaction: 'This transaction already exists in the portfolio',
+    duplicate_flow: 'This cash flow already exists in the portfolio',
+    confirmation_required: 'Type the exact portfolio name to confirm',
+    too_many_portfolios: 'Reached the portfolio limit for this account',
+    internal_error: 'Server error. Please try again.',
+  },
+};
+
+// ---------------------------------------------------------------- API modulu
+
+let current = null;
+
+function detect() {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (LOCALES.includes(saved)) return saved;
+  } catch { /* tryb prywatny */ }
+  for (const tag of navigator.languages ?? [navigator.language ?? '']) {
+    const base = String(tag).split('-')[0].toLowerCase();
+    if (LOCALES.includes(base)) return base;
+  }
+  return DEFAULT_LOCALE;
+}
+
+export function getLocale() {
+  if (!current) current = detect();
+  return current;
+}
+
+export function setLocale(locale) {
+  if (!LOCALES.includes(locale)) return getLocale();
+  current = locale;
+  try { localStorage.setItem(STORAGE_KEY, locale); } catch { /* tryb prywatny */ }
+  document.documentElement.lang = locale;
+  return current;
+}
+
+export const intlLocale = () => INTL[getLocale()] ?? INTL[DEFAULT_LOCALE];
+
+function interpolate(template, params) {
+  return String(template).replace(/\{(\w+)\}/g, (match, key) => (
+    params?.[key] === undefined || params?.[key] === null ? match : String(params[key])
+  ));
+}
+
+/** Tlumaczenie klucza. Brak klucza zwraca sam klucz - widac to od razu w interfejsie. */
+export function t(key, params) {
+  const locale = getLocale();
+  const value = DICT[locale]?.[key] ?? DICT[DEFAULT_LOCALE]?.[key];
+  if (value === undefined) return key;
+  return params ? interpolate(value, params) : value;
+}
+
+/** Komunikat bledu: najpierw wlasny katalog po kodzie, potem tekst z serwera. */
+export function errorText(code, serverMessage, details) {
+  const locale = getLocale();
+  const template = ERRORS[locale]?.[code] ?? ERRORS[DEFAULT_LOCALE]?.[code];
+  if (template) return interpolate(template, details ?? {});
+  return serverMessage || t('toast.loadFailed', { error: code });
+}
+
+/**
+ * Podstawia tlumaczenia w statycznym HTML.
+ * data-i18n -> textContent, data-i18n-title -> title, data-i18n-placeholder -> placeholder,
+ * data-i18n-aria -> aria-label.
+ */
+export function applyStatic(root = document) {
+  for (const node of root.querySelectorAll('[data-i18n]')) {
+    node.textContent = t(node.dataset.i18n);
+  }
+  for (const node of root.querySelectorAll('[data-i18n-title]')) {
+    node.title = t(node.dataset.i18nTitle);
+  }
+  for (const node of root.querySelectorAll('[data-i18n-placeholder]')) {
+    node.placeholder = t(node.dataset.i18nPlaceholder);
+  }
+  for (const node of root.querySelectorAll('[data-i18n-aria]')) {
+    node.setAttribute('aria-label', t(node.dataset.i18nAria));
+  }
+  const title = document.querySelector('title[data-i18n]');
+  if (title) document.title = t(title.dataset.i18n);
+  document.documentElement.lang = getLocale();
+}
+
+/** Przelacznik jezyka - dwa przyciski, zmiana przeladowuje widok bez utraty sesji. */
+export function languageSwitcher(onChange) {
+  const wrap = document.createElement('div');
+  wrap.className = 'range lang-switch';
+  wrap.setAttribute('aria-label', t('app.language'));
+  for (const locale of LOCALES) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.textContent = locale.toUpperCase();
+    button.title = LOCALE_LABELS[locale];
+    button.setAttribute('aria-pressed', String(getLocale() === locale));
+    button.addEventListener('click', () => {
+      if (getLocale() === locale) return;
+      setLocale(locale);
+      onChange?.(locale);
+    });
+    wrap.append(button);
+  }
+  return wrap;
+}

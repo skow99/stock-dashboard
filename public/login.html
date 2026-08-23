@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex, nofollow" />
+  <title data-i18n="app.title">Master Portfolio Dashboard</title>
+  <link rel="icon" href="./favicon.svg" />
+  <link rel="stylesheet" href="./styles.css?v=20260822b" />
+  <script type="module" src="./auth.js?v=20260822b"></script>
+</head>
+<body>
+<div class="auth-wrap">
+  <div class="auth-box">
+    <div class="row">
+      <h1 id="title" data-i18n="app.title">Master Portfolio Dashboard</h1>
+      <span class="spacer"></span>
+      <span id="lang-switch"></span>
+    </div>
+    <p class="hint" id="subtitle" data-i18n="auth.checking">Sprawdzanie stanu instalacji...</p>
+
+    <div class="auth-error hidden" id="error"></div>
+
+    <form id="form" class="hidden" autocomplete="on">
+      <label><span data-i18n="auth.email">E-mail</span>
+        <input type="email" name="email" required autocomplete="username" autofocus />
+      </label>
+
+      <label id="wrap-name" class="hidden"><span data-i18n="auth.displayName">Nazwa wyswietlana</span>
+        <input name="displayName" autocomplete="nickname" data-i18n-placeholder="app.optional" />
+      </label>
+
+      <label><span data-i18n="auth.password">Haslo</span>
+        <input type="password" name="password" required autocomplete="current-password" minlength="10" />
+        <span class="hint" id="password-hint"></span>
+      </label>
+
+      <label id="wrap-invite" class="hidden"><span data-i18n="auth.inviteCode">Kod zaproszenia</span>
+        <input name="inviteCode" autocomplete="off" />
+        <span class="hint" data-i18n="auth.inviteHint"></span>
+      </label>
+
+      <button type="submit" class="primary" id="submit" data-i18n="auth.signIn">Zaloguj</button>
+    </form>
+
+    <div class="switcher">
+      <button type="button" class="ghost hidden" id="toggle"></button>
+    </div>
+  </div>
+</div>
+<div id="toasts"></div>
+</body>
+</html>

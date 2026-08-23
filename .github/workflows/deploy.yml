@@ -1,0 +1,117 @@
+name: Deploy
+
+# Merge do main jedzie na produkcje automatycznie, ale nie na skroty:
+# testy -> staging na sanityzowanej kopii produkcji -> produkcja z proba generalna
+# migracji i automatycznym rollbackiem.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: # mozliwosc recznego uruchomienia z zakladki Actions
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false # nigdy nie przerywamy trwajacego wdrozenia w polowie
+
+permissions:
+  contents: read
+  id-token: write # wymagane przez Workload Identity Federation
+
+jobs:
+  test:
+    uses: ./.github/workflows/ci.yml
+
+  deploy:
+    name: Staging, potem produkcja
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: production
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Krotkozyjacy token zamiast klucza konta uslugowego - w repozytorium nie lezy zaden sekret GCP.
+      - name: Uwierzytelnienie w Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+
+      - name: gcloud CLI
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+
+      - name: Paczka wydania
+        run: |
+          # Prawa wyrownane w archiwum - inaczej katalog projektu z prawami 700
+          # zablokowalby usluge na serwerze.
+          tar -czf /tmp/stock-dashboard.tar.gz \
+            --exclude='./.git' --exclude='./.github' --exclude='./data' \
+            --exclude='./.env' --exclude='./node_modules' \
+            --mode='u+rwX,go=rX' \
+            --transform='s,^\.,stock-dashboard,' .
+          ls -lh /tmp/stock-dashboard.tar.gz
+
+      - name: Wyslanie na maszyne
+        run: |
+          gcloud compute scp /tmp/stock-dashboard.tar.gz \
+            "${{ vars.GCP_VM_NAME }}":~/release.tar.gz \
+            --zone "${{ vars.GCP_ZONE }}" --tunnel-through-iap --quiet
+
+      # Staging dostaje sanityzowana kopie produkcji: prawdziwy ksztalt danych,
+      # zadnych dzialajacych poswiadczen.
+      # release.sh bierzemy Z PACZKI, a nie z /opt - inaczej nowe wydanie byloby
+      # instalowane skryptem ze starej wersji.
+      - name: Wydanie na staging
+        run: |
+          gcloud compute ssh "${{ vars.GCP_VM_NAME }}" \
+            --zone "${{ vars.GCP_ZONE }}" --tunnel-through-iap --quiet \
+            --command 'set -e; W=$(mktemp -d); tar -xzf ~/release.tar.gz -C "$W"; sudo bash "$W/stock-dashboard/deploy/gcp/release.sh" ~/release.tar.gz staging; rm -rf "$W"'
+
+      - name: Smoke test stagingu
+        run: |
+          gcloud compute ssh "${{ vars.GCP_VM_NAME }}" \
+            --zone "${{ vars.GCP_ZONE }}" --tunnel-through-iap --quiet \
+            --command '
+              set -e
+              curl -fsS http://127.0.0.1:8788/stock-dashboard/api/v1/health | grep -q "\"ok\":true"
+              curl -fsS -o /dev/null -w "login.html %{http_code}\n" http://127.0.0.1:8788/stock-dashboard/login.html
+              echo "Staging odpowiada poprawnie"
+            '
+
+      # Produkcja: release.sh sam robi kopie zapasowa, probe generalna migracji
+      # i cofa sie do poprzedniej wersji, jesli health check nie przejdzie.
+      - name: Wydanie na produkcje
+        run: |
+          gcloud compute ssh "${{ vars.GCP_VM_NAME }}" \
+            --zone "${{ vars.GCP_ZONE }}" --tunnel-through-iap --quiet \
+            --command 'set -e; W=$(mktemp -d); tar -xzf ~/release.tar.gz -C "$W"; sudo bash "$W/stock-dashboard/deploy/gcp/release.sh" ~/release.tar.gz production; rm -rf "$W"'
+
+      - name: Weryfikacja publiczna
+        run: |
+          HOST="${{ vars.PUBLIC_HOST }}"
+          if [ -z "$HOST" ]; then
+            echo "Zmienna PUBLIC_HOST nieustawiona - pomijam sprawdzenie z internetu."
+            exit 0
+          fi
+          for i in $(seq 1 10); do
+            if curl -fsS --max-time 10 "https://$HOST/stock-dashboard/api/v1/health" | grep -q '"ok":true'; then
+              echo "Produkcja odpowiada publicznie: https://$HOST/stock-dashboard/"
+              exit 0
+            fi
+            sleep 6
+          done
+          echo "Serwis nie odpowiedzial publicznie. Aplikacja moze dzialac, a problem lezec w Caddy."
+          exit 1
+
+      - name: Podsumowanie
+        if: always()
+        run: |
+          {
+            echo "### Wydanie ${{ github.sha }}"
+            echo ""
+            echo "- staging: sanityzowana kopia produkcji, port 8788 (tylko petla zwrotna)"
+            echo "- produkcja: kopia zapasowa + proba generalna migracji + health check"
+            echo "- cofniecie: \`sudo rsync -a --delete /opt/stock-dashboard.old/ /opt/stock-dashboard/ && sudo systemctl restart stock-dashboard\`"
+          } >> "$GITHUB_STEP_SUMMARY"

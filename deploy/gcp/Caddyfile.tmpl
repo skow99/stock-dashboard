@@ -1,0 +1,59 @@
+# Caddyfile - terminacja HTTPS przed dashboardem.
+# __PUBLIC_HOST__ jest podstawiane przez bootstrap.sh.
+#
+# Caddy sam pobiera i odnawia certyfikat Let's Encrypt dla tej nazwy hosta.
+# Aplikacja nasluchuje wylacznie na 127.0.0.1:8787 i nigdy nie jest wystawiona bezposrednio.
+{
+	# Adres kontaktowy dla Let's Encrypt (powiadomienia o wygasajacych certyfikatach).
+	email admin@__PUBLIC_HOST__
+	admin off
+}
+
+__PUBLIC_HOST__ {
+	encode zstd gzip
+
+	# Aplikacja sama ustawia CSP, X-Frame-Options, nosniff i reszte naglowkow bezpieczenstwa.
+	# Tutaj dokladamy tylko to, co ma sens dopiero po terminacji TLS.
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		-Server
+	}
+
+	reverse_proxy 127.0.0.1:8787 {
+		header_up X-Real-IP {remote_host}
+
+		# Krotkie limity: aplikacja jest lekka, dlugie zapytanie oznacza problem.
+		transport http {
+			dial_timeout 5s
+			response_header_timeout 30s
+		}
+	}
+
+	# Logi ida do journala (stderr uslugi systemd), nie do wlasnego pliku.
+	#
+	# Dlaczego nie plik: usluga Caddy dziala jako uzytkownik 'caddy', a pakiet Debiana
+	# nie tworzy /var/log/caddy. Caddy probuje wtedy zalozyc ten katalog sam, w nalezacym
+	# do roota /var/log, i dostaje "permission denied" - proces w ogole nie wstaje.
+	# Journal rozwiazuje to bez konfiguracji i sam zajmuje sie rotacja.
+	#
+	# Podglad:  journalctl -u caddy -f -o cat | jq
+	#
+	# Gdybys mimo wszystko chcial log w pliku, najpierw utworz katalog jako root:
+	#   sudo mkdir -p /var/log/caddy && sudo chown caddy:caddy /var/log/caddy
+	# i dopiero wtedy zamien blok 'output' na:
+	#   output file /var/log/caddy/access.log { roll_size 10mb roll_keep 3 }
+	log {
+		output stderr
+
+		# Nie logujemy sekretow: ciasteczko sesji, token webhooka, token CSRF.
+		format filter {
+			wrap json
+			fields {
+				request>headers>Cookie delete
+				request>headers>Authorization delete
+				request>headers>X-Csrf-Token delete
+				resp_headers>Set-Cookie delete
+			}
+		}
+	}
+}

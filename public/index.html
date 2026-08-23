@@ -1,0 +1,422 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex, nofollow" />
+  <title data-i18n="app.title">Master Portfolio Dashboard</title>
+  <link rel="icon" href="./favicon.svg" />
+  <link rel="stylesheet" href="./styles.css?v=20260822b" />
+  <script type="module" src="./app.js?v=20260822b"></script>
+</head>
+<body>
+
+<header class="top">
+  <div class="inner">
+    <div class="brand">
+      <h1 data-i18n="app.title">Master Portfolio Dashboard</h1>
+      <span class="sub" id="as-of" data-i18n="app.loading">Ladowanie...</span>
+    </div>
+
+    <nav class="pf-switch" id="pf-switch" data-i18n-aria="app.selectPortfolio"></nav>
+
+    <span class="spacer"></span>
+
+    <span id="lang-switch"></span>
+    <button id="btn-refresh" data-i18n="app.refresh" data-i18n-title="app.refreshTitle">Odswiez</button>
+    <button id="btn-manage" class="ghost" data-i18n="app.portfolios" data-i18n-title="app.portfoliosTitle">Portfele</button>
+    <button id="btn-account" class="ghost" data-i18n="app.account" data-i18n-title="app.accountTitle">Konto</button>
+  </div>
+</header>
+
+<main class="wrap">
+  <div id="banners"></div>
+
+  <section class="cards" id="cards"></section>
+
+  <!-- Widoczne tylko w trybie "Wszystkie portfele" -->
+  <section class="panel hidden" id="panel-breakdown">
+    <header><h2 data-i18n="section.breakdown">Podzial na portfele</h2></header>
+    <div class="table-scroll">
+      <table id="tbl-breakdown">
+        <thead><tr>
+          <th class="left static" data-i18n="col.portfolio">Portfel</th>
+          <th class="static" data-i18n="col.value">Wartosc</th>
+          <th class="static" data-i18n="col.invested">Zainwestowane</th>
+          <th class="static" data-i18n="col.cash">Gotowka</th>
+          <th class="static" data-i18n="col.positions">Pozycje</th>
+          <th class="static" data-i18n="col.realized">Wynik zrealizowany</th>
+          <th class="static" data-i18n="col.share">Udzial</th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <nav class="tabs" id="tabs" role="tablist">
+    <button role="tab" data-tab="portfolio" aria-selected="true" data-i18n="tab.portfolio">Portfel</button>
+    <button role="tab" data-tab="transactions" aria-selected="false" data-i18n="tab.transactions">Historia transakcji</button>
+    <button role="tab" data-tab="closed" aria-selected="false" data-i18n="tab.closed">Zamkniete pozycje</button>
+    <button role="tab" data-tab="cash" aria-selected="false" data-i18n="tab.cash">Przeplywy gotowki</button>
+    <button role="tab" data-tab="perticker" aria-selected="false" data-i18n="tab.perTicker">Wynik per ticker</button>
+    <button role="tab" data-tab="manage" aria-selected="false" data-i18n="tab.manage">Portfele</button>
+    <button role="tab" data-tab="account" aria-selected="false" data-i18n="tab.account">Konto</button>
+  </nav>
+
+  <!-- ============================================ TAB: PORTFEL -->
+  <section id="tab-portfolio" role="tabpanel">
+    <div class="panel">
+      <header>
+        <h2 data-i18n="section.portfolioValue">Wartosc portfela</h2>
+        <span class="spacer"></span>
+        <div class="range" id="range-value" role="group" data-i18n-aria="chart.rangeHistory">
+          <button data-range="T" aria-pressed="false">T</button>
+          <button data-range="M" aria-pressed="false">M</button>
+          <button data-range="Q" aria-pressed="true">Q</button>
+          <button data-range="Y" aria-pressed="false">Y</button>
+          <button data-range="A" aria-pressed="false">A</button>
+        </div>
+      </header>
+      <div class="chart-meta" id="meta-value"></div>
+      <div class="chart" id="chart-value"></div>
+    </div>
+
+    <div class="panel">
+      <header>
+        <h2 data-i18n="section.twr">Indeks portfela (TWR) vs benchmarki</h2>
+        <span class="hint" data-i18n="section.twrHint"></span>
+      </header>
+      <div class="legend" id="legend-index"></div>
+      <div class="chart-meta" id="meta-index"></div>
+      <div class="chart" id="chart-index"></div>
+    </div>
+
+    <div class="panel">
+      <header><h2 data-i18n="section.sectors">Ekspozycja sektorowa</h2></header>
+      <div id="sectors"></div>
+    </div>
+
+    <div class="panel">
+      <header>
+        <h2 data-i18n="section.positions">Pozycje</h2>
+        <span class="spacer"></span>
+        <div class="range" id="region-filter" role="group" data-i18n-aria="form.region">
+          <button data-region="ALL" aria-pressed="true" data-i18n="app.all">Wszystkie</button>
+          <button data-region="EUROPE" aria-pressed="false" data-i18n="form.regionEurope">Europa</button>
+          <button data-region="USA" aria-pressed="false" data-i18n="form.regionUsa">USA</button>
+        </div>
+        <button id="btn-csv" data-i18n="form.downloadCsv">Pobierz CSV</button>
+      </header>
+      <div class="table-scroll">
+        <table id="tbl-positions">
+          <thead><tr>
+            <th class="left" data-sort="name" data-i18n="col.company">Spolka</th>
+            <th data-sort="valuePln" data-i18n="col.value">Wartosc</th>
+            <th data-sort="dayPct" data-i18n="col.changePct">Zmiana %</th>
+            <th data-sort="pnlPln" data-i18n="col.result">Wynik</th>
+            <th data-sort="price" data-i18n="col.price">Kurs</th>
+            <th data-sort="qty" data-i18n="col.qty">Ilosc</th>
+            <th data-sort="weight" data-i18n="col.share">Udzial</th>
+            <th class="left static" data-i18n="col.plan">Plan</th>
+            <th class="static" data-i18n="col.stop">Stop</th>
+            <th class="left" data-sort="sector" data-i18n="col.sector">Sektor</th>
+            <th class="left static" data-i18n="col.note">Notatka</th>
+          </tr></thead>
+          <tbody></tbody>
+          <tfoot></tfoot>
+        </table>
+      </div>
+    </div>
+
+    <div class="panel">
+      <header>
+        <h2><span data-i18n="section.instrument">Kurs instrumentu</span>: <span id="symbol-title"></span></h2>
+        <span class="spacer"></span>
+        <div class="range" id="range-symbol" role="group" data-i18n-aria="chart.rangeInstrument">
+          <button data-range="M" aria-pressed="false">M</button>
+          <button data-range="Q" aria-pressed="false">Q</button>
+          <button data-range="Y" aria-pressed="true">Y</button>
+          <button data-range="A" aria-pressed="false">A</button>
+        </div>
+      </header>
+      <div class="chart-meta" id="meta-symbol"></div>
+      <div class="chart" id="chart-symbol"></div>
+    </div>
+  </section>
+
+  <!-- ============================================ TAB: TRANSAKCJE -->
+  <section id="tab-transactions" role="tabpanel" class="hidden">
+    <div class="panel">
+      <header>
+        <h2 id="tx-form-title" data-i18n="section.addTransaction">Dodaj transakcje</h2>
+        <span class="spacer"></span><span class="hint" id="tx-form-hint"></span>
+      </header>
+      <form class="form-grid" id="form-tx">
+        <label><span data-i18n="col.date">Data</span><input type="date" name="date" required /></label>
+        <label><span data-i18n="col.ticker">Ticker</span><input name="ticker" data-i18n-placeholder="form.tickerPlaceholder" required /></label>
+        <label><span data-i18n="col.company">Spolka</span><input name="name" data-i18n-placeholder="app.optional" /></label>
+        <label><span data-i18n="col.type">Typ</span><select name="side"><option value="BUY">BUY</option><option value="SELL">SELL</option></select></label>
+        <label><span data-i18n="col.qty">Ilosc</span><input type="number" name="qty" step="any" min="0" required /></label>
+        <label><span data-i18n="col.price">Cena</span><input type="number" name="price" step="any" min="0" required /></label>
+        <label><span data-i18n="col.fee">Prowizja</span><input type="number" name="fee" step="any" value="0" /></label>
+        <label><span data-i18n="col.currency">Waluta</span><select name="currency"><option>PLN</option><option>USD</option><option>EUR</option><option>SEK</option><option>GBP</option><option>CHF</option></select></label>
+        <label><span data-i18n="col.note">Notatka</span><input name="note" /></label>
+        <div class="actions">
+          <button type="submit" class="primary" id="tx-submit" data-i18n="app.add">Dodaj</button>
+          <button type="button" id="tx-cancel" class="hidden" data-i18n="app.cancel">Anuluj</button>
+        </div>
+      </form>
+    </div>
+
+    <div class="panel">
+      <header>
+        <h2 data-i18n="section.transactionHistory">Historia transakcji</h2>
+        <span class="spacer"></span>
+        <input id="tx-search" data-i18n-placeholder="form.filterPlaceholder" style="max-width:240px" />
+        <select id="tx-side" style="max-width:120px">
+          <option value="ALL" data-i18n="app.all">Wszystkie</option>
+          <option value="BUY">BUY</option>
+          <option value="SELL">SELL</option>
+        </select>
+        <button id="tx-clear" class="ghost" data-i18n="app.clear">Wyczysc</button>
+      </header>
+      <div class="table-scroll">
+        <table id="tbl-tx">
+          <thead><tr>
+            <th class="left static" data-i18n="col.date">Data</th>
+            <th class="left static" data-i18n="col.portfolio">Portfel</th>
+            <th class="left static" data-i18n="col.ticker">Ticker</th>
+            <th class="left static" data-i18n="col.company">Spolka</th>
+            <th class="static" data-i18n="col.type">Typ</th>
+            <th class="static" data-i18n="col.qty">Ilosc</th>
+            <th class="static" data-i18n="col.price">Cena</th>
+            <th class="static" data-i18n="col.operationValue">Wartosc</th>
+            <th class="static" data-i18n="col.operationValuePln">Wartosc (PLN)</th>
+            <th class="static" data-i18n="col.currency">Waluta</th>
+            <th class="static" data-i18n="col.resultPln">Wynik (PLN)</th>
+            <th class="static" data-i18n="col.resultPct">Wynik %</th>
+            <th class="left static" data-i18n="col.note">Notatka</th>
+            <th class="static" data-i18n="col.actions">Akcje</th>
+          </tr></thead>
+          <tbody></tbody>
+          <tfoot></tfoot>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================ TAB: ZAMKNIETE -->
+  <section id="tab-closed" role="tabpanel" class="hidden">
+    <div class="panel">
+      <header><h2 data-i18n="tab.closed">Zamkniete pozycje</h2></header>
+      <div class="table-scroll">
+        <table id="tbl-closed">
+          <thead><tr>
+            <th class="left static" data-i18n="col.closedOn">Data zamkniecia</th>
+            <th class="left static" data-i18n="col.portfolio">Portfel</th>
+            <th class="left static" data-i18n="col.ticker">Ticker</th>
+            <th class="left static" data-i18n="col.company">Spolka</th>
+            <th class="static" data-i18n="col.avgBuy">Sr. BUY</th>
+            <th class="static" data-i18n="col.avgSell">Sr. SELL</th>
+            <th class="static" data-i18n="col.qty">Ilosc</th>
+            <th class="static" data-i18n="col.result">Wynik</th>
+            <th class="static" data-i18n="col.resultPln">Wynik (PLN)</th>
+            <th class="static" data-i18n="col.resultPct">Wynik %</th>
+            <th class="static" data-i18n="col.currency">Waluta</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================ TAB: GOTOWKA -->
+  <section id="tab-cash" role="tabpanel" class="hidden">
+    <div class="panel">
+      <header>
+        <h2 id="cf-form-title" data-i18n="section.addCashFlow">Dodaj przeplyw gotowki</h2>
+        <span class="spacer"></span><span class="hint" id="cf-form-hint"></span>
+      </header>
+      <form class="form-grid" id="form-cf">
+        <label><span data-i18n="col.date">Data</span><input type="date" name="date" required /></label>
+        <label><span data-i18n="col.type">Typ</span><select name="type">
+          <option value="Deposit" data-i18n="flow.Deposit">Wplata</option>
+          <option value="Withdrawal" data-i18n="flow.Withdrawal">Wyplata</option>
+          <option value="Dividend" data-i18n="flow.Dividend">Dywidenda</option>
+          <option value="Interest" data-i18n="flow.Interest">Odsetki</option>
+          <option value="Fee" data-i18n="flow.Fee">Prowizja</option>
+          <option value="Tax" data-i18n="flow.Tax">Podatek</option>
+        </select></label>
+        <label><span data-i18n="col.amount">Kwota</span><input type="number" name="amount" step="any" required /></label>
+        <label><span data-i18n="col.currency">Waluta</span><select name="currency"><option>PLN</option><option>USD</option><option>EUR</option><option>SEK</option><option>GBP</option><option>CHF</option></select></label>
+        <label><span data-i18n="col.comment">Komentarz</span><input name="comment" /></label>
+        <div class="actions">
+          <button type="submit" class="primary" id="cf-submit" data-i18n="app.add">Dodaj</button>
+          <button type="button" id="cf-cancel" class="hidden" data-i18n="app.cancel">Anuluj</button>
+        </div>
+      </form>
+    </div>
+
+    <div class="panel">
+      <header><h2 data-i18n="section.cashFlows">Przeplywy</h2><span class="spacer"></span><span class="hint" id="cf-summary"></span></header>
+      <div class="table-scroll">
+        <table id="tbl-cf">
+          <thead><tr>
+            <th class="left static" data-i18n="col.date">Data</th>
+            <th class="left static" data-i18n="col.portfolio">Portfel</th>
+            <th class="left static" data-i18n="col.type">Typ</th>
+            <th class="static" data-i18n="col.amount">Kwota</th>
+            <th class="static" data-i18n="col.currency">Waluta</th>
+            <th class="left static" data-i18n="col.comment">Komentarz</th>
+            <th class="left static" data-i18n="col.source">Zrodlo</th>
+            <th class="static" data-i18n="col.actions">Akcje</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================ TAB: WYNIK PER TICKER -->
+  <section id="tab-perticker" role="tabpanel" class="hidden">
+    <div class="panel">
+      <header><h2 data-i18n="section.realizedOverTime">Zrealizowany wynik w czasie</h2></header>
+      <div class="chart" id="chart-realized"></div>
+    </div>
+    <div class="panel">
+      <header><h2 data-i18n="section.perTicker">Wynik per ticker</h2></header>
+      <div class="table-scroll">
+        <table id="tbl-perticker">
+          <thead><tr>
+            <th class="left static" data-i18n="col.ticker">Ticker</th>
+            <th class="left static" data-i18n="col.company">Spolka</th>
+            <th class="static" data-i18n="col.trades">Transakcje</th>
+            <th class="static" data-i18n="col.resultPln">Wynik (PLN)</th>
+          </tr></thead>
+          <tbody></tbody>
+          <tfoot></tfoot>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================ TAB: ZARZADZANIE PORTFELAMI -->
+  <section id="tab-manage" role="tabpanel" class="hidden">
+    <div class="panel">
+      <header><h2 data-i18n="section.newPortfolio">Nowy portfel</h2></header>
+      <form class="form-grid" id="form-pf">
+        <label><span data-i18n="col.name">Nazwa</span><input name="name" required data-i18n-placeholder="form.portfolioNamePlaceholder" /></label>
+        <label><span data-i18n="col.type">Typ</span><select name="kind">
+          <option value="brokerage" data-i18n="kind.brokerage">Maklerski</option>
+          <option value="ike" data-i18n="kind.ike">IKE</option>
+          <option value="ikze" data-i18n="kind.ikze">IKZE</option>
+          <option value="pension" data-i18n="kind.pension">Emerytalny</option>
+          <option value="crypto" data-i18n="kind.crypto">Krypto</option>
+          <option value="other" data-i18n="kind.other">Inny</option>
+        </select></label>
+        <label><span data-i18n="col.broker">Broker</span><input name="broker" data-i18n-placeholder="form.brokerPlaceholder" /></label>
+        <label><span data-i18n="form.baseCurrency">Waluta bazowa</span><select name="baseCurrency"><option>PLN</option><option>USD</option><option>EUR</option><option>SEK</option></select></label>
+        <label><span data-i18n="form.color">Kolor</span><input type="color" name="color" value="#4fc3f7" /></label>
+        <div class="actions"><button type="submit" class="primary" data-i18n="form.create">Utworz</button></div>
+      </form>
+    </div>
+
+    <div class="panel">
+      <header><h2 data-i18n="section.yourPortfolios">Twoje portfele</h2></header>
+      <div class="table-scroll">
+        <table id="tbl-pf">
+          <thead><tr>
+            <th class="left static" data-i18n="col.name">Nazwa</th>
+            <th class="left static" data-i18n="col.type">Typ</th>
+            <th class="left static" data-i18n="col.broker">Broker</th>
+            <th class="static" data-i18n="col.currency">Waluta</th>
+            <th class="static" data-i18n="col.value">Wartosc</th>
+            <th class="static" data-i18n="col.webhook">Webhook</th>
+            <th class="static" data-i18n="col.actions">Akcje</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="panel">
+      <header><h2 data-i18n="section.shareLinks">Linki tylko do odczytu</h2><span class="spacer"></span>
+        <button id="btn-share-new" data-i18n="action.newLink">Utworz link</button>
+      </header>
+      <p class="hint" data-i18n="section.shareHint"></p>
+      <div class="table-scroll">
+        <table id="tbl-share">
+          <thead><tr>
+            <th class="left static" data-i18n="col.label">Etykieta</th>
+            <th class="left static" data-i18n="col.scope">Zakres</th>
+            <th class="left static" data-i18n="col.portfolio">Portfel</th>
+            <th class="left static" data-i18n="col.validUntil">Wazny do</th>
+            <th class="static" data-i18n="col.views">Odslony</th>
+            <th class="static" data-i18n="col.actions">Akcje</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================ TAB: KONTO -->
+  <section id="tab-account" role="tabpanel" class="hidden">
+    <div class="panel">
+      <header><h2 data-i18n="tab.account">Konto</h2></header>
+      <dl id="account-info" class="row"></dl>
+      <p><button id="btn-logout" class="danger" data-i18n="auth.signOut">Wyloguj</button>
+         <button id="btn-logout-all" class="ghost" data-i18n="auth.signOutEverywhere">Wyloguj wszedzie</button></p>
+    </div>
+
+    <div class="panel">
+      <header><h2 data-i18n="section.changePassword">Zmiana hasla</h2></header>
+      <form class="form-grid" id="form-password">
+        <label><span data-i18n="form.currentPassword">Aktualne haslo</span><input type="password" name="currentPassword" required autocomplete="current-password" /></label>
+        <label><span data-i18n="form.newPassword">Nowe haslo</span><input type="password" name="newPassword" required autocomplete="new-password" /></label>
+        <div class="actions"><button type="submit" class="primary" data-i18n="form.changePassword">Zmien haslo</button></div>
+      </form>
+      <p class="hint" data-i18n="section.changePasswordHint"></p>
+    </div>
+
+    <div class="panel">
+      <header><h2 data-i18n="section.sessions">Aktywne sesje</h2></header>
+      <div class="table-scroll">
+        <table id="tbl-sessions">
+          <thead><tr>
+            <th class="left static" data-i18n="col.signedInAt">Zalogowano</th>
+            <th class="left static" data-i18n="col.lastActivity">Ostatnia aktywnosc</th>
+            <th class="left static" data-i18n="col.ip">IP</th>
+            <th class="left static" data-i18n="col.browser">Przegladarka</th>
+            <th class="static" data-i18n="col.thisSession">Ta sesja</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="panel hidden" id="panel-admin">
+      <header><h2 data-i18n="section.invites">Administracja - zaproszenia</h2><span class="spacer"></span>
+        <button id="btn-invite" data-i18n="action.newInvite">Wygeneruj kod zaproszenia</button>
+      </header>
+      <p class="hint" data-i18n="section.invitesHint"></p>
+      <div class="table-scroll">
+        <table id="tbl-invites">
+          <thead><tr>
+            <th class="left static" data-i18n="col.id">ID</th>
+            <th class="left static" data-i18n="col.email">E-mail</th>
+            <th class="left static" data-i18n="card.role">Rola</th>
+            <th class="left static" data-i18n="col.validUntil">Wazny do</th>
+            <th class="left static" data-i18n="col.status">Status</th>
+            <th class="static" data-i18n="col.actions">Akcje</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+</main>
+
+<div id="toasts"></div>
+</body>
+</html>

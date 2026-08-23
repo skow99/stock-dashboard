@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "note": "Sumy kontrolne wydanych migracji. Nie edytuj recznie - patrz docs/MIGRATIONS.md",
+  "allowDestructive": [],
+  "migrations": [
+    {
+      "index": 0,
+      "version": 1,
+      "sha256": "fa766fcb80b58756",
+      "addedAt": "2026-08-23"
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+# Sekrety i dane - NIGDY do repozytorium
+.env
+data/*.db
+data/*.db-wal
+data/*.db-shm
+data/cache/*.json
+data/backups/
+
+# Srodowisko
+node_modules/
+*.log
+
+# macOS
+.DS_Store

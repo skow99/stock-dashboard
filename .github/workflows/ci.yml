@@ -1,0 +1,70 @@
+name: CI
+
+# Bramka jakosci. Wdrozenie na produkcje jest automatyczne, wiec to jest miejsce,
+# w ktorym zly kod ma zostac zatrzymany.
+on:
+  pull_request:
+  push:
+    branches-ignore: [main]
+  workflow_call: # wywolywane przez deploy.yml przed wdrozeniem
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Testy i kontrole
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      SD_OFFLINE: '1' # zero ruchu do zrodel rynkowych w CI
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Wersja Node (wymagany node:sqlite)
+        run: |
+          node -v
+          node -e "require('node:sqlite'); console.log('node:sqlite dostepny')"
+
+      - name: Skladnia backendu i skryptow
+        run: |
+          for f in server.mjs src/*.mjs src/*/*.mjs scripts/*.mjs tests/*.mjs; do
+            node --check "$f" || { echo "Blad skladni: $f"; exit 1; }
+          done
+
+      - name: Skladnia frontendu (moduly ES)
+        run: |
+          T=$(mktemp -d)
+          for f in public/*.js; do cp "$f" "$T/$(basename "${f%.js}").mjs"; done
+          for f in "$T"/*.mjs; do
+            node --check "$f" || { echo "Blad skladni: $f"; exit 1; }
+          done
+
+      - name: Skladnia skryptow powloki
+        run: |
+          for f in deploy/gcp/*.sh ops/*.sh tests/*.sh; do
+            bash -n "$f" || { echo "Blad skladni: $f"; exit 1; }
+          done
+
+      - name: Straznik migracji
+        run: node scripts/migration-guard.mjs check
+
+      - name: Testy jednostkowe, i18n, migracje
+        run: node --test tests/*.test.mjs
+
+      - name: Smoke end-to-end
+        run: bash tests/smoke.sh
+
+      - name: Sekrety nie moga trafic do repozytorium
+        run: |
+          if git ls-files | grep -E '(^|/)\.env$|\.db$|\.db-wal$|\.db-shm$'; then
+            echo "W repozytorium sa pliki, ktorych tam byc nie powinno."
+            exit 1
+          fi
+          echo "OK - brak sekretow i baz w repozytorium"

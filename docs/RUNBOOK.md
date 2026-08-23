@@ -181,6 +181,38 @@ Flaga `-T` jest obowiązkowa — bez niej pseudoterminal przerobi końce linii i
 
 Gdyby mimo to wisiało: sprawdź, czy wisi też zwykłe `vm --command 'echo test'`. Jeśli tak, problem jest w IAP albo OS Login, nie w przesyle — patrz sekcja o `actAs` powyżej.
 
+## Wykres wartości zaczyna się za późno albo ma dziury
+
+Historia jest odtwarzana z transakcji i historycznych notowań. Przelicz ją ponownie:
+
+```bash
+vm --command 'sudo -u sdapp env SD_DATA_DIR=/var/lib/stock-dashboard \
+  SD_DB_PATH=/var/lib/stock-dashboard/dashboard.db \
+  node /opt/stock-dashboard/scripts/admin.mjs rebuild-history'
+```
+
+Bez argumentu obejmuje wszystkie portfele w instancji; z adresem e-mail — tylko portfele tego konta.
+
+Skąd biorą się dziury:
+
+| Objaw | Przyczyna |
+|---|---|
+| „pominieto N dni bez notowan" | instrument nie miał jeszcze notowań w tym okresie (debiut później niż transakcja) albo źródło nie zna tego tickera |
+| wykres zaczyna się w dniu uruchomienia systemu | odtwarzanie jeszcze nie było uruchomione dla tego portfela |
+| skok wartości w jednym dniu | sprawdź transakcję z tego dnia — najczęściej literówka w ilości albo cenie |
+
+Sprawdzenie, które dni pochodzą z odtworzenia, a które z zapisu bieżącego:
+
+```bash
+vm --command 'sudo -u sdapp env SD_DB_PATH=/var/lib/stock-dashboard/dashboard.db node -e "
+  const {DatabaseSync}=require(\"node:sqlite\");
+  const db=new DatabaseSync(process.env.SD_DB_PATH);
+  console.log(db.prepare(\"SELECT source, COUNT(*) n, MIN(day) od, MAX(day) do FROM portfolio_history GROUP BY source\").all());
+"'
+```
+
+`rebuilt` to wpis odtworzony wstecz, `eod` — zapisany po zamknięciu sesji, `NULL` — sprzed sierpnia 2026.
+
 ## Na stronie wisi komunikat o niedostępnym źródle danych
 
 Najpierw sprawdź, czy to naprawdę problem. Od sierpnia 2026 ostrzeżenie pojawia się **tylko wtedy, gdy realnie brakuje świeżych notowań** — samo padnięcie jednego źródła jest obsługiwane przez łańcuch zapasowy i nie powinno nic wyświetlać.

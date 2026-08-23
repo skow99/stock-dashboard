@@ -38,6 +38,10 @@ export function replayLedger({ transactions = [], baseline = [], fxRates = {} })
 
   const enriched = [];
   let tradeCashPln = 0;
+  // Ten sam przeplyw gotowki, ale w walutach ORYGINALNYCH i bez przeliczenia.
+  // Potrzebny przy odtwarzaniu historii: ta sama transakcja wyceniana jest tam
+  // kursem z KAZDEGO kolejnego dnia, wiec kwota w PLN nie moze byc zamrozona.
+  const tradeCashByCurrency = {};
   const warnings = [];
 
   for (const tx of sortTransactions(transactions)) {
@@ -63,7 +67,10 @@ export function replayLedger({ transactions = [], baseline = [], fxRates = {} })
     if (tx.side === 'BUY') {
       position.qty += qty;
       position.cost += qty * price + fee;
-      if (affectsCash) tradeCashPln -= (qty * price + fee) * fx;
+      if (affectsCash) {
+        tradeCashPln -= (qty * price + fee) * fx;
+        tradeCashByCurrency[currency] = (tradeCashByCurrency[currency] ?? 0) - (qty * price + fee);
+      }
     } else if (tx.side === 'SELL') {
       const available = Math.max(0, position.qty);
       const matched = Math.min(qty, available);
@@ -86,7 +93,10 @@ export function replayLedger({ transactions = [], baseline = [], fxRates = {} })
         if (position.qty <= EPS) { position.qty = 0; position.cost = 0; }
       }
       // Kluczowa ochrona: do gotowki wchodzi wylacznie ilosc faktycznie posiadana.
-      if (affectsCash) tradeCashPln += (matched * price - fee) * fx;
+      if (affectsCash) {
+        tradeCashPln += (matched * price - fee) * fx;
+        tradeCashByCurrency[currency] = (tradeCashByCurrency[currency] ?? 0) + (matched * price - fee);
+      }
     }
 
     record.valuePln = record.grossValue * fx;
@@ -97,6 +107,7 @@ export function replayLedger({ transactions = [], baseline = [], fxRates = {} })
     positionState: state,
     transactions: enriched,
     tradeCashPln,
+    tradeCashByCurrency,
     warnings,
     baselineByKey,
   };

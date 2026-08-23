@@ -106,6 +106,30 @@ Podsumowanie po cofnięciu pokazuje, ile wierszy usunięto i ile zostawiono.
 
 ---
 
+## Historia wykresu po imporcie transakcji z przeszłości
+
+Zaimportowanie transakcji sprzed lat samo w sobie nie tworzy wykresu wartości — ten powstawał dotąd wyłącznie z migawek zapisywanych po zamknięciu sesji, więc zaczynał się w dniu uruchomienia systemu.
+
+Po każdym imporcie transakcji lub przepływów historia jest więc **odtwarzana wstecz automatycznie**: od pierwszego zdarzenia do dziś, dzień po dniu. Pozycje biorą się z księgi transakcji, a wycena z notowań i kursów walut obowiązujących **w tamtym dniu** — nie z dzisiejszych.
+
+W zakładce Import jest też przycisk **Przelicz historię**, przydatny po ręcznej edycji transakcji.
+
+| | |
+|---|---|
+| Dni bez sesji (weekendy, święta) | ostatnie znane zamknięcie |
+| Dni przed pierwszym notowaniem instrumentu | pomijane — żadna cena nie byłaby prawdziwa |
+| Kursy walut | historyczne, dzień po dniu |
+| Zapytania do źródeł | jedno na ticker, potem cache wspólny dla całej instancji |
+
+Odtworzenie dziesięciu lat dla pięciu spółek to pięć zapytań, nie kilkanaście tysięcy. Cache notowań i kursów jest wspólny dla wszystkich użytkowników i portfeli — to dane publiczne, więc drugi portfel z tą samą spółką nie rusza sieci w ogóle.
+
+Z konsoli, dla wszystkich portfeli naraz:
+
+```bash
+node scripts/admin.mjs rebuild-history            # cala instancja
+node scripts/admin.mjs rebuild-history a@b.pl     # portfele jednego konta
+```
+
 ## Limity
 
 | | |

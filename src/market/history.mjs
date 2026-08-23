@@ -91,6 +91,102 @@ export function flushHistoryCache() {
   cache.flushNow();
 }
 
+// ---------------------------------------------------------------- serie dzienne
+
+/** Historia do odtwarzania zmienia sie raz dziennie - trzymamy ja dobe. */
+const DAILY_TTL_MS = 12 * 60 * 60 * 1000;
+const dailyInflight = new Map();
+
+/** Poczatek okna pobierania. Jedno stale okno = jeden wpis w cache wspolnym dla wszystkich. */
+const DAILY_OD = '2000-01-01';
+
+/**
+ * Notowania dzienne za jawnie podany okres. Yahoo respektuje interval=1d tylko wtedy,
+ * gdy zakres podany jest przez period1/period2 - parametr range=max jest po cichu
+ * zamieniany na dane miesieczne.
+ */
+async function fromYahooDaily(symbol) {
+  const providerSymbol = toYahooSymbol(symbol);
+  const period1 = Math.floor(new Date(`${DAILY_OD}T00:00:00Z`).getTime() / 1000);
+  const period2 = Math.floor(Date.now() / 1000);
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(providerSymbol)}`
+    + `?interval=1d&period1=${period1}&period2=${period2}`;
+
+  const json = await fetchJson('yahoo', url);
+  const result = json?.chart?.result?.[0];
+  const closes = result?.indicators?.quote?.[0]?.close;
+  const stamps = result?.timestamp;
+  if (!Array.isArray(closes) || !Array.isArray(stamps)) return null;
+
+  const points = [];
+  for (let i = 0; i < stamps.length; i += 1) {
+    const value = closes[i];
+    if (!Number.isFinite(value)) continue;
+    points.push({ day: new Date(stamps[i] * 1000).toISOString().slice(0, 10), value });
+  }
+  return points.length ? { providerSymbol, points, provider: 'yahoo-daily' } : null;
+}
+
+/**
+ * Pelna dzienna seria zamkniec jako mapa dzien -> cena.
+ *
+ * Uzywana przy odtwarzaniu historii portfela, gdzie ten sam ticker jest potrzebny
+ * dla setek dni. Jedno pobranie na ticker na dobe, cache GLOBALNY na dysku -
+ * ceny sa danymi publicznymi, wiec dziela je wszyscy uzytkownicy i wszystkie portfele.
+ *
+ * @returns {Promise<{ byDay: Record<string, number>, first: string|null, last: string|null, provider: string }>}
+ */
+export async function getDailyCloses(symbol) {
+  const key = `daily|${String(symbol).toUpperCase()}`;
+  const hit = cache.get(key);
+  if (hit && Date.now() - hit.at < DAILY_TTL_MS) return hit.value;
+  if (dailyInflight.has(key)) return dailyInflight.get(key);
+
+  const task = (async () => {
+    // NIE uzywamy range=max: Yahoo oddaje wtedy dane MIESIECZNE (odstep ~30 dni),
+    // mimo interval=1d. Przy odtwarzaniu historii dawalo to luki po kilkanascie dni.
+    // Jawny okres period1/period2 zwraca prawdziwe notowania dzienne.
+    const seria = (await fromYahooDaily(symbol)) ?? (await fetchSeries(symbol, '10y'));
+    if (!seria?.points?.length) {
+      // Brak swiezych danych nie kasuje tego, co juz mamy.
+      return hit?.value ?? { byDay: {}, first: null, last: null, provider: 'none' };
+    }
+    const byDay = {};
+    for (const point of seria.points) {
+      if (Number.isFinite(point.value) && point.value > 0) byDay[point.day] = point.value;
+    }
+    const dni = Object.keys(byDay).sort();
+    const value = {
+      byDay,
+      first: dni[0] ?? null,
+      last: dni[dni.length - 1] ?? null,
+      provider: seria.provider,
+    };
+    cache.set(key, { at: Date.now(), value });
+    return value;
+  })().finally(() => dailyInflight.delete(key));
+
+  dailyInflight.set(key, task);
+  return task;
+}
+
+/**
+ * Cena z danego dnia albo ostatnia znana wczesniej.
+ *
+ * Gielda nie pracuje w weekendy i swieta, a portfel w te dni nadal ma wartosc -
+ * przenosimy wiec ostatnie zamkniecie. Zwraca null przed pierwszym notowaniem
+ * instrumentu, bo tam zadna cena nie bylaby prawdziwa.
+ */
+export function closeOnOrBefore(seria, day, kursor = { day: null, value: null }) {
+  const bezposrednio = seria?.byDay?.[day];
+  if (Number.isFinite(bezposrednio)) {
+    kursor.day = day;
+    kursor.value = bezposrednio;
+    return bezposrednio;
+  }
+  return kursor.value;
+}
+
 export const BENCHMARKS = [
   { id: 'WIG20', label: 'WIG20', symbol: '^WIG20' },
   { id: 'MWIG40TR', label: 'mWIG40TR', symbol: 'MWIG40TR' },

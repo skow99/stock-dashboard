@@ -274,6 +274,12 @@ async function commit() {
       method: 'POST', body: requestBody(),
     });
     toast(t('import.done', { count: res.result.inserted }), 'success');
+    // Serwer sam przelicza historie po imporcie - pokazujemy, co z tego wyszlo.
+    if (res.history?.days) {
+      $('#rebuild-result').textContent = t('rebuild.done', {
+        days: res.history.days, from: res.history.from, to: res.history.to,
+      });
+    }
     resetAll();
     await loadBatches();
     onImported?.();
@@ -301,6 +307,32 @@ async function undo(batch) {
 }
 
 // ---------------------------------------------------------------- historia
+
+/**
+ * Przeliczenie historii wartosci portfela wstecz z transakcji.
+ * Wolane recznie przyciskiem; po imporcie serwer robi to sam.
+ */
+async function rebuildHistory() {
+  const cel = $('#rebuild-result');
+  const przycisk = $('#btn-rebuild');
+  przycisk.disabled = true;
+  cel.textContent = t('rebuild.working');
+  try {
+    const res = await api(`/portfolios/${state.portfolioId}/history/rebuild`, { method: 'POST' });
+    const r = res.result;
+    cel.textContent = r.days
+      ? t('rebuild.done', { days: r.days, from: r.from, to: r.to })
+      : t('rebuild.nothing');
+    if (r.skipped) cel.textContent += ` ${t('rebuild.skipped', { count: r.skipped })}`;
+    toast(t('rebuild.toast', { days: r.days }), 'success');
+    onImported?.();
+  } catch (err) {
+    cel.textContent = '';
+    toast(err instanceof ApiError ? err.message : String(err), 'error', 8000);
+  } finally {
+    przycisk.disabled = false;
+  }
+}
 
 async function loadBatches() {
   try {
@@ -382,6 +414,7 @@ function wire() {
     input.click();
   });
 
+  $('#btn-rebuild').addEventListener('click', rebuildHistory);
   $('#import-reset').addEventListener('click', resetAll);
   $('#import-back').addEventListener('click', resetAll);
   $('#import-commit').addEventListener('click', commit);
@@ -404,6 +437,7 @@ export function renderImportTab(options) {
   $('#import-needs-portfolio').classList.toggle('hidden', !noPortfolio);
   $('#import-step-file').classList.toggle('hidden', noPortfolio);
   $('#import-history').classList.toggle('hidden', noPortfolio);
+  $('#import-rebuild').classList.toggle('hidden', noPortfolio);
   if (noPortfolio) {
     $('#import-step-preview').classList.add('hidden');
     return;

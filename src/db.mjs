@@ -209,6 +209,14 @@ export const MIGRATIONS = [
   CREATE INDEX idx_tx_batch    ON transactions(import_batch_id) WHERE import_batch_id IS NOT NULL;
   CREATE INDEX idx_flows_batch ON cash_flows(import_batch_id)   WHERE import_batch_id IS NOT NULL;
   `,
+
+  // 3 - pochodzenie wpisu historii (expand: kolumna NULL-owalna, nic nie usuwamy)
+  //     'eod'         - zapisany na biezaco po zamknieciu sesji
+  //     'rebuilt'     - odtworzony wstecz z transakcji i historycznych kursow
+  //     NULL          - wpis sprzed tej migracji (traktowany jak 'eod')
+  `
+  ALTER TABLE portfolio_history ADD COLUMN source TEXT;
+  `,
 ];
 
 function nowIso() {

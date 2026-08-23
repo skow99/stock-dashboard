@@ -8,6 +8,7 @@
 //   node scripts/admin.mjs portfolios <email>
 //   node scripts/admin.mjs backup [katalog]
 //   node scripts/admin.mjs vacuum
+//   node scripts/admin.mjs rebuild-history [email]   - przelicza historie portfeli z transakcji
 import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
@@ -110,6 +111,60 @@ const commands = {
     db.exec('ANALYZE');
     const after = fs.statSync(config.dbPath).size;
     console.log(`VACUUM: ${(before / 1024).toFixed(0)} kB -> ${(after / 1024).toFixed(0)} kB`);
+  },
+
+  /**
+   * Przelicza historie portfeli wstecz z transakcji i historycznych notowan.
+   * Bez argumentu obejmuje wszystkie portfele w instancji.
+   */
+  'rebuild-history': async () => {
+    const { getDb } = await import('../src/db.mjs');
+    const { rebuildPortfolioHistory } = await import('../src/history-rebuild.mjs');
+    const email = process.argv[3];
+
+    const portfele = email
+      ? getDb().prepare(`
+          SELECT p.id, p.name, u.email FROM portfolios p
+          JOIN users u ON u.id = p.user_id
+          WHERE lower(u.email) = lower(?) AND p.archived = 0
+          ORDER BY p.position
+        `).all(email)
+      : getDb().prepare(`
+          SELECT p.id, p.name, u.email FROM portfolios p
+          JOIN users u ON u.id = p.user_id
+          WHERE p.archived = 0
+          ORDER BY u.email, p.position
+        `).all();
+
+    if (!portfele.length) {
+      console.log(email ? `Brak portfeli dla ${email}` : 'Brak portfeli w bazie');
+      return;
+    }
+
+    console.log(`Przeliczam historie dla ${portfele.length} portfeli.`);
+    console.log('Notowania i kursy sa pobierane raz i trafiaja do cache wspolnego,');
+    console.log('wiec kolejne portfele z tymi samymi spolkami ida juz bez ruchu sieciowego.\n');
+
+    let laczniePunktow = 0;
+    for (const p of portfele) {
+      const start = Date.now();
+      try {
+        // eslint-disable-next-line no-await-in-loop
+        const wynik = await rebuildPortfolioHistory(p.id);
+        laczniePunktow += wynik.days;
+        const zakres = wynik.from ? `${wynik.from} .. ${wynik.to}` : 'brak transakcji';
+        console.log(`  ${(p.email + ' / ' + p.name).padEnd(42)} ${String(wynik.days).padStart(5)} dni  ${zakres}  (${Date.now() - start} ms)`);
+        if (wynik.skipped) console.log(`      pominieto ${wynik.skipped} dni bez notowan dla posiadanych pozycji`);
+      } catch (err) {
+        console.log(`  ${(p.email + ' / ' + p.name).padEnd(42)} BLAD: ${err.message}`);
+      }
+    }
+    console.log(`\nZapisano ${laczniePunktow} punktow historii.`);
+
+    const { flushHistoryCache } = await import('../src/market/history.mjs');
+    const { flushFxCache } = await import('../src/market/fx.mjs');
+    flushHistoryCache();
+    flushFxCache();
   },
 };
 

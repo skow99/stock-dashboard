@@ -10,6 +10,7 @@ import {
 } from '../ledger.mjs';
 import { invalidateSnapshots } from '../snapshot.mjs';
 import { tx as dbTx, audit } from '../db.mjs';
+import { rebuildPortfolioHistory } from '../history-rebuild.mjs';
 
 export function registerPortfolioRoutes(router) {
   router.get('/portfolios', (ctx) => {
@@ -62,6 +63,21 @@ export function registerPortfolioRoutes(router) {
       token,
       noteKey: 'webhookTokenShownOnce',
     });
+  });
+
+  /**
+   * Przeliczenie historii portfela wstecz z transakcji.
+   *
+   * Idzie synchronicznie - dla typowego portfela to ulamek sekundy, bo notowania
+   * i kursy leza w cache wspolnym dla calej instancji. Pierwszy przebieg po dodaniu
+   * nowego tickera pobiera jego historie i trwa kilka sekund.
+   */
+  router.post('/portfolios/:portfolioId/history/rebuild', async (ctx) => {
+    const row = requirePortfolio(ctx.userId, ctx.params.portfolioId);
+    const result = await rebuildPortfolioHistory(row.id);
+    audit({ userId: ctx.userId, portfolioId: row.id, action: 'history.rebuilt', ip: ctx.ip, detail: result });
+    invalidateSnapshots(ctx.userId);
+    sendJson(ctx.res, 200, { ok: true, result });
   });
 
   /** Pelny eksport portfela - format nadaje sie do backupu i do importu w innej instancji. */

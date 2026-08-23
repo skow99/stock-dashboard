@@ -329,12 +329,14 @@ export function listHistory(portfolioIds) {
 }
 
 export function upsertHistoryPoint(portfolioId, point) {
+  // source='eod' odroznia zapis biezacy od wpisu odtworzonego wstecz (src/history-rebuild.mjs).
   getDb().prepare(`
-    INSERT INTO portfolio_history (portfolio_id, day, total_pln, invested_pln, cash_pln, provisional, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO portfolio_history (portfolio_id, day, total_pln, invested_pln, cash_pln, provisional, source, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, 'eod', ?)
     ON CONFLICT(portfolio_id, day) DO UPDATE SET
       total_pln = excluded.total_pln, invested_pln = excluded.invested_pln,
-      cash_pln = excluded.cash_pln, provisional = excluded.provisional, updated_at = excluded.updated_at
+      cash_pln = excluded.cash_pln, provisional = excluded.provisional,
+      source = 'eod', updated_at = excluded.updated_at
   `).run(portfolioId, point.day, point.totalPln, point.investedPln ?? 0, point.cashPln ?? 0,
     point.provisional ? 1 : 0, nowIso());
 }

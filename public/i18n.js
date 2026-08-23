@@ -205,6 +205,16 @@ const DICT = {
     'import.err.import_row_invalid': 'Wiersza nie da sie odczytac',
     'import.err.unknown': 'Nieznany blad',
 
+    // ---- odtwarzanie historii wartosci
+    'rebuild.title': 'Historia wartosci portfela',
+    'rebuild.action': 'Przelicz historie',
+    'rebuild.hint': 'Odtwarza wykres wartosci wstecz, od pierwszej transakcji: pozycje z ksiegi, wycena po notowaniach i kursach walut z danego dnia. Po imporcie dzieje sie to automatycznie - ten przycisk przydaje sie po recznej edycji transakcji.',
+    'rebuild.working': 'Licze...',
+    'rebuild.done': 'Przeliczono {days} dni: {from} - {to}.',
+    'rebuild.nothing': 'Brak transakcji, nie ma czego przeliczac.',
+    'rebuild.skipped': 'Pominieto {count} dni bez notowan.',
+    'rebuild.toast': 'Historia przeliczona: {days} dni',
+
     // ---- wykresy i sekcje
     'section.breakdown': 'Podzial na portfele',
     'section.portfolioValue': 'Wartosc portfela',
@@ -605,6 +615,16 @@ const DICT = {
     'import.err.invalid_type': 'Unrecognised operation type',
     'import.err.import_row_invalid': 'This row cannot be read',
     'import.err.unknown': 'Unknown error',
+
+    // ---- portfolio value history rebuild
+    'rebuild.title': 'Portfolio value history',
+    'rebuild.action': 'Rebuild history',
+    'rebuild.hint': 'Reconstructs the value chart backwards from your first transaction: positions from the ledger, valued at each day\'s own quotes and exchange rates. This runs automatically after an import - the button is for after manual edits.',
+    'rebuild.working': 'Working...',
+    'rebuild.done': 'Rebuilt {days} days: {from} - {to}.',
+    'rebuild.nothing': 'No transactions, nothing to rebuild.',
+    'rebuild.skipped': 'Skipped {count} days with no quotes.',
+    'rebuild.toast': 'History rebuilt: {days} days',
 
     // ---- charts and sections
     'section.breakdown': 'Breakdown by portfolio',

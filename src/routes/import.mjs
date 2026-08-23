@@ -10,6 +10,8 @@ import { invalidateSnapshots } from '../snapshot.mjs';
 import { buildPlan, toPreview, commitPlan, listBatches, undoBatch, MAX_ROWS } from '../import/engine.mjs';
 import { SHAPES } from '../import/schema.mjs';
 import { csvTemplate } from '../import/template.mjs';
+import { rebuildPortfolioHistory } from '../history-rebuild.mjs';
+import { log } from '../log.mjs';
 
 /** Plik na 5000 wierszy w base64 miesci sie w 4 MB z zapasem. */
 const IMPORT_BODY_LIMIT = 4 * 1024 * 1024;
@@ -55,7 +57,21 @@ export function registerImportRoutes(router) {
       userId: ctx.userId, ip: ctx.ip, filename: body.filename ?? '',
     });
     invalidateSnapshots(ctx.userId);
-    sendJson(ctx.res, 201, { ok: true, result });
+
+    // Transakcje z przeszlosci nie maja odpowiednika w historii portfela - bez tego
+    // wykres zaczynalby sie dopiero w dniu pierwszej migawki EOD. Nieudane odtworzenie
+    // NIE moze uniewaznic zapisanego importu: dane sa juz w bazie i sa poprawne.
+    let history = null;
+    if (plan.shape !== 'holdings') {
+      try {
+        history = await rebuildPortfolioHistory(row.id);
+        invalidateSnapshots(ctx.userId);
+      } catch (err) {
+        log.warn('import.history_rebuild_failed', { portfolioId: row.id, error: err.message });
+      }
+    }
+
+    sendJson(ctx.res, 201, { ok: true, result, history });
   });
 
   router.get('/portfolios/:portfolioId/import/batches', (ctx) => {

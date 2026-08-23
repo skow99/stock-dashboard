@@ -78,15 +78,38 @@ curl -s http://127.0.0.1:8787/stock-dashboard/api/v1/health | jq
 ## Struktura / Layout
 
 ```text
-server.mjs      HTTP, routing, cykl życia procesu
-src/            konfiguracja, baza, auth, i18n, dane rynkowe, arytmetyka, endpointy
-public/         trzy strony (dashboard, logowanie, widok publiczny) + moduły ES
-scripts/        migracja z v1, narzędzia administracyjne
-deploy/gcp/     wdrożenie na Google Cloud free tier (VM, Caddy, HTTPS)
-tests/          testy jednostkowe, i18n, migracji, smoke end-to-end
-ops/            systemd, backup, Tailscale
-data/           SQLite + cache rynkowy (poza repozytorium)
+server.mjs             HTTP, routing, cykl życia procesu
+src/                   konfiguracja, baza, auth, i18n, dane rynkowe, arytmetyka, endpointy
+public/                trzy strony (dashboard, logowanie, widok publiczny) + moduły ES
+scripts/               migracja z v1, administracja, strażnik migracji, sanityzacja bazy
+deploy/gcp/            wdrożenie na GCP, wydanie z rollbackiem, konfiguracja CI/CD
+.github/workflows/     CI na PR, automatyczne wdrożenie z main
+docs/                  zasady rozwoju, migracje, runbook awaryjny
+tests/                 jednostkowe, i18n, migracje, smoke end-to-end
+ops/                   systemd, backup, Tailscale
+data/                  SQLite + cache rynkowy (poza repozytorium)
+migrations.lock.json   sumy kontrolne wydanych migracji
 ```
+
+## Rozwój / Development
+
+| Dokument | O czym |
+|---|---|
+| [`docs/CONTRIBUTING.md`](docs/CONTRIBUTING.md) | przepływ pracy, testy, staging, cofanie zmian |
+| [`docs/MIGRATIONS.md`](docs/MIGRATIONS.md) | zmiany schematu na żywym systemie, expand/contract |
+| [`docs/RUNBOOK.md`](docs/RUNBOOK.md) | co robić, gdy coś padnie |
+| [`deploy/gcp/README.md`](deploy/gcp/README.md) | wdrożenie od zera, koszty, diagnostyka |
+
+```bash
+# Pełna bramka jakości — to samo uruchamia CI
+node scripts/migration-guard.mjs check
+node --test tests/*.test.mjs
+bash tests/smoke.sh
+```
+
+Merge do `main` uruchamia testy, wydanie na staging (sanityzowana kopia produkcji),
+a następnie wydanie produkcyjne z kopią zapasową, próbą generalną migracji
+i automatycznym cofnięciem przy nieudanym health checku.
 
 ## Bezpieczeństwo / Security
 

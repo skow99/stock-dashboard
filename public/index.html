@@ -60,6 +60,7 @@
     <button role="tab" data-tab="cash" aria-selected="false" data-i18n="tab.cash">Przeplywy gotowki</button>
     <button role="tab" data-tab="perticker" aria-selected="false" data-i18n="tab.perTicker">Wynik per ticker</button>
     <button role="tab" data-tab="manage" aria-selected="false" data-i18n="tab.manage">Portfele</button>
+    <button role="tab" data-tab="import" aria-selected="false" data-i18n="tab.import">Import</button>
     <button role="tab" data-tab="account" aria-selected="false" data-i18n="tab.account">Konto</button>
   </nav>
 
@@ -352,6 +353,138 @@
             <th class="left static" data-i18n="col.portfolio">Portfel</th>
             <th class="left static" data-i18n="col.validUntil">Wazny do</th>
             <th class="static" data-i18n="col.views">Odslony</th>
+            <th class="static" data-i18n="col.actions">Akcje</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================ TAB: IMPORT -->
+  <section id="tab-import" role="tabpanel" class="hidden">
+    <!-- Import zawsze dotyczy JEDNEGO portfela - w widoku skonsolidowanym nie wiadomo,
+         do ktorego portfela mialyby trafic wiersze. -->
+    <div class="panel hidden" id="import-needs-portfolio">
+      <p class="hint" data-i18n="import.selectPortfolioFirst"></p>
+    </div>
+
+    <div class="panel" id="import-step-file">
+      <header>
+        <h2 data-i18n="import.title">Import danych z pliku</h2>
+        <span class="spacer"></span>
+        <span class="hint" id="import-target"></span>
+      </header>
+      <p class="hint" data-i18n="import.intro"></p>
+
+      <div id="import-drop" class="dropzone" tabindex="0" role="button"
+           data-i18n-aria="import.dropAria">
+        <strong data-i18n="import.dropTitle">Przeciagnij plik CSV</strong>
+        <span data-i18n="import.dropHint"></span>
+        <input type="file" id="import-file" accept=".csv,.txt,.tsv,text/csv,text/plain" hidden />
+      </div>
+
+      <details id="import-paste-wrap">
+        <summary data-i18n="import.pasteToggle">albo wklej dane z arkusza</summary>
+        <textarea id="import-paste" rows="6" spellcheck="false"
+                  data-i18n-placeholder="import.pastePlaceholder"></textarea>
+      </details>
+
+      <div class="actions">
+        <button id="import-analyze" class="primary" data-i18n="import.analyze">Sprawdz plik</button>
+        <button id="import-reset" class="ghost hidden" data-i18n="import.startOver">Zacznij od nowa</button>
+      </div>
+
+      <p class="hint">
+        <span data-i18n="import.templatesLabel"></span>
+        <a href="./api/v1/import/template?kind=transactions" download data-i18n="import.kind.transactions">Transakcje</a> ·
+        <a href="./api/v1/import/template?kind=cashflows" download data-i18n="import.kind.cashflows">Przeplywy</a> ·
+        <a href="./api/v1/import/template?kind=holdings" download data-i18n="import.kind.holdings">Stan portfela</a>
+      </p>
+    </div>
+
+    <!-- Podglad: wszystko, co sie stanie, ZANIM cokolwiek trafi do bazy -->
+    <div class="panel hidden" id="import-step-preview">
+      <header>
+        <h2 data-i18n="import.previewTitle">Podglad</h2>
+        <span class="spacer"></span>
+        <span id="import-detected" class="hint"></span>
+      </header>
+
+      <div id="import-summary" class="import-summary"></div>
+
+      <div class="form-grid import-controls">
+        <label><span data-i18n="import.shape">Rodzaj danych</span>
+          <select id="import-shape">
+            <option value="transactions" data-i18n="import.kind.transactions">Transakcje</option>
+            <option value="cashflows" data-i18n="import.kind.cashflows">Przeplywy gotowki</option>
+            <option value="holdings" data-i18n="import.kind.holdings">Stan portfela</option>
+          </select>
+        </label>
+        <label><span data-i18n="import.delimiter">Separator kolumn</span>
+          <select id="import-delimiter">
+            <option value="" data-i18n="import.auto">automatycznie</option>
+            <option value=";">średnik ;</option>
+            <option value=",">przecinek ,</option>
+            <option value="&#9;" data-i18n="import.tab">tabulator</option>
+            <option value="|">pionowa kreska |</option>
+          </select>
+        </label>
+        <label class="check"><input type="checkbox" id="import-dups" />
+          <span data-i18n="import.includeDuplicates">Wpisz takze duplikaty</span></label>
+      </div>
+
+      <details id="import-mapping-wrap">
+        <summary data-i18n="import.mappingToggle">Przypisanie kolumn</summary>
+        <p class="hint" data-i18n="import.mappingHint"></p>
+        <div class="table-scroll">
+          <table id="import-mapping">
+            <thead><tr>
+              <th class="left static" data-i18n="import.colInFile">Kolumna w pliku</th>
+              <th class="left static" data-i18n="import.colSample">Przyklad</th>
+              <th class="left static" data-i18n="import.colMeaning">Znaczenie</th>
+            </tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </details>
+
+      <div id="import-problems-wrap" class="hidden">
+        <h3 data-i18n="import.problemsTitle">Wiersze odrzucone</h3>
+        <p class="hint" data-i18n="import.problemsHint"></p>
+        <div class="table-scroll">
+          <table id="import-problems">
+            <thead><tr>
+              <th class="static" data-i18n="import.colLine">Wiersz</th>
+              <th class="left static" data-i18n="import.colReason">Powod</th>
+              <th class="left static" data-i18n="import.colContent">Zawartosc</th>
+            </tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+
+      <h3 data-i18n="import.samplesTitle">Co zostanie zapisane</h3>
+      <div class="table-scroll">
+        <table id="import-samples"><thead><tr></tr></thead><tbody></tbody></table>
+      </div>
+
+      <div class="actions">
+        <button id="import-commit" class="primary" data-i18n="import.commit">Zapisz</button>
+        <button id="import-back" class="ghost" data-i18n="import.startOver">Zacznij od nowa</button>
+      </div>
+    </div>
+
+    <div class="panel" id="import-history">
+      <header><h2 data-i18n="import.historyTitle">Historia importow</h2></header>
+      <p class="hint" data-i18n="import.historyHint"></p>
+      <div class="table-scroll">
+        <table id="tbl-import-batches">
+          <thead><tr>
+            <th class="left static" data-i18n="import.colWhen">Kiedy</th>
+            <th class="left static" data-i18n="import.colFile">Plik</th>
+            <th class="left static" data-i18n="import.colKind">Rodzaj</th>
+            <th class="static" data-i18n="import.colRows">Wierszy</th>
             <th class="static" data-i18n="col.actions">Akcje</th>
           </tr></thead>
           <tbody></tbody>

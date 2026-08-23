@@ -62,6 +62,8 @@ SD_OFFLINE=1 node server.mjs
 | `node --test tests/unit.test.mjs` | arytmetyka portfela, tickery, TWR, daty, parsery, hasła | ~1 s |
 | `node --test tests/i18n.test.mjs` | spójność katalogów PL/EN, kompletność kluczy | ~1 s |
 | `node --test tests/migrations.test.mjs` | niezmienność migracji, zgodność schematów, zachowanie danych | ~2 s |
+| `node --test tests/import.test.mjs` | odczyt CSV, rozpoznanie formatu, deduplikacja, cofanie wsadu | ~2 s |
+| `node --test tests/ui-contract.test.mjs` | selektory DOM, kompletność tłumaczeń, whitelist statyków | ~1 s |
 | `node --test tests/migration.test.mjs` | migracja z v1 | ~1 s |
 | `bash tests/smoke.sh` | 65 asercji end-to-end na czystej bazie | ~15 s |
 

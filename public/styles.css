@@ -189,8 +189,57 @@ td input { padding: 3px 6px; font-size: 12px; }
 .auth-error { background: rgba(255, 141, 141, .1); border: 1px solid rgba(255, 141, 141, .4); color: var(--neg); border-radius: 8px; padding: 8px 12px; font-size: 12.5px; }
 .hint { font-size: 11px; color: var(--muted); }
 
+/* ------------------------------------------------------------ import */
+
+/* Pole zrzutu pliku. Jest takze przyciskiem (tabindex + role), wiec musi miec
+   widoczny focus - klawiatura to nie dodatek. */
+.dropzone {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+  border: 2px dashed var(--border); border-radius: var(--radius);
+  padding: 28px 16px; margin: 12px 0; cursor: pointer;
+  background: var(--panel-2); color: var(--muted); text-align: center;
+  transition: border-color .15s, background .15s;
+}
+.dropzone:hover, .dropzone:focus-visible { border-color: var(--accent); color: var(--text); }
+.dropzone:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.dropzone.over { border-color: var(--accent); background: rgba(79, 195, 247, .08); }
+.dropzone.loaded { border-style: solid; border-color: var(--pos); color: var(--text); }
+.dropzone strong { font-size: 14px; color: var(--text); }
+.dropzone span { font-size: 12px; }
+
+#import-paste { width: 100%; margin-top: 8px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+#import-paste-wrap summary, #import-mapping-wrap summary { cursor: pointer; font-size: 12.5px; color: var(--muted); padding: 4px 0; }
+#import-paste-wrap summary:hover, #import-mapping-wrap summary:hover { color: var(--text); }
+
+.import-summary { display: flex; flex-wrap: wrap; gap: 10px; margin: 4px 0 14px; }
+.import-stat {
+  display: flex; flex-direction: column; gap: 2px; min-width: 96px;
+  background: var(--panel-2); border: 1px solid var(--border-soft);
+  border-radius: 8px; padding: 8px 12px;
+}
+.import-stat strong { font-size: 19px; line-height: 1.1; }
+.import-stat span { font-size: 11px; color: var(--muted); }
+.import-stat.good strong { color: var(--pos); }
+.import-stat.warn strong { color: var(--warn); }
+.import-stat.bad strong { color: var(--neg); }
+
+.import-controls { margin-bottom: 12px; }
+.import-controls label.check { flex-direction: row; align-items: center; gap: 6px; align-self: end; padding-bottom: 6px; }
+.import-controls label.check input { width: auto; }
+
+#import-target { font-size: 12px; }
+.dim { color: var(--muted); }
+tr.dim td { color: var(--muted); }
+td.good { color: var(--pos); }
+td.warn { color: var(--warn); }
+td.bad { color: var(--neg); }
+button.small { font-size: 11.5px; padding: 3px 8px; }
+
 /* ------------------------------------------------------------ mobile */
 @media (max-width: 720px) {
+  .import-summary .import-stat { min-width: 72px; padding: 6px 9px; }
+  .import-stat strong { font-size: 16px; }
+  .dropzone { padding: 20px 12px; }
   .cards { grid-template-columns: repeat(2, 1fr); }
   .form-grid { grid-template-columns: repeat(2, 1fr); }
   .sector-row { grid-template-columns: 90px 1fr 56px; }

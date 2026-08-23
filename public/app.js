@@ -4,6 +4,7 @@ import {
   fmtPln, fmtK, fmtNum, fmtPct, fmtSigned, fmtDateTime, signClass, isNum, ApiError,
 } from './ui.js';
 import { lineChart, multiLineChart, barChart, seriesMeta } from './charts.js';
+import { renderImportTab } from './import.js';
 import { t, applyStatic, languageSwitcher, getLocale } from './i18n.js';
 
 const STORE_KEY = 'mpd.v2.prefs';
@@ -114,6 +115,7 @@ function render() {
     cash: renderCashTab,
     perticker: renderPerTickerTab,
     manage: renderManageTab,
+    import: renderImport,
     account: renderAccountTab,
   };
   renderers[state.tab]?.();
@@ -274,9 +276,24 @@ function renderTabs() {
   for (const button of $$('#tabs button')) {
     button.setAttribute('aria-selected', String(button.dataset.tab === state.tab));
   }
-  for (const tab of ['portfolio', 'transactions', 'closed', 'cash', 'perticker', 'manage', 'account']) {
+  for (const tab of ['portfolio', 'transactions', 'closed', 'cash', 'perticker', 'manage', 'import', 'account']) {
     $(`#tab-${tab}`).classList.toggle('hidden', tab !== state.tab);
   }
+}
+
+// ---------------------------------------------------------------- TAB: import
+
+/**
+ * Import dotyczy zawsze jednego portfela - w widoku skonsolidowanym nie ma
+ * odpowiedzi na pytanie, do ktorego portfela mialyby trafic wiersze z pliku.
+ */
+function renderImport() {
+  const portfolio = activePortfolio();
+  renderImportTab({
+    portfolioId: portfolio?.id ?? null,
+    portfolioName: portfolio?.name ?? '',
+    onImported: () => { refresh(); },
+  });
 }
 
 // ---------------------------------------------------------------- TAB: portfel

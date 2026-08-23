@@ -57,6 +57,7 @@ export function validateTransaction(input) {
     note: String(input.note ?? '').slice(0, 500),
     source: ['manual', 'bootstrap', 'import', 'webhook:xtb', 'webhook:ibkr'].includes(input.source) ? input.source : 'manual',
     external_id: input.externalId ? String(input.externalId).slice(0, 80) : null,
+    import_batch_id: input.importBatchId ? String(input.importBatchId).slice(0, 80) : null,
   };
 }
 
@@ -76,6 +77,7 @@ export function validateCashFlow(input) {
     comment: String(input.comment ?? '').slice(0, 300),
     source: ['manual', 'import', 'webhook:xtb', 'webhook:ibkr'].includes(input.source) ? input.source : 'manual',
     external_id: input.externalId ? String(input.externalId).slice(0, 80) : null,
+    import_batch_id: input.importBatchId ? String(input.importBatchId).slice(0, 80) : null,
   };
 }
 
@@ -103,10 +105,10 @@ export function insertTransaction(portfolioId, input, ctx = {}) {
   const id = newId('tx_');
   try {
     getDb().prepare(`
-      INSERT INTO transactions (id, portfolio_id, trade_date, ticker, name, side, qty, price, fee, currency, note, source, external_id, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO transactions (id, portfolio_id, trade_date, ticker, name, side, qty, price, fee, currency, note, source, external_id, import_batch_id, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(id, portfolioId, data.trade_date, data.ticker, data.name, data.side, data.qty, data.price,
-      data.fee, data.currency, data.note, data.source, data.external_id, at, at);
+      data.fee, data.currency, data.note, data.source, data.external_id, data.import_batch_id, at, at);
   } catch (err) {
     if (String(err.message).includes('UNIQUE')) throw conflict('duplicate_transaction');
     throw err;
@@ -118,8 +120,11 @@ export function insertTransaction(portfolioId, input, ctx = {}) {
 export function updateTransaction(portfolioId, id, input, ctx = {}) {
   const existing = getTransaction(portfolioId, id);
   const data = validateTransaction({ ...toTransactionInput(existing), ...input });
+  // Reczna edycja ODPINA wiersz od wsadu importu: od tej chwili to praca uzytkownika,
+  // a nie zawartosc pliku, wiec cofniecie importu nie ma prawa jej skasowac.
+  // Zrodlo ('import') zostaje - wiadomo, skad wiersz sie wzial.
   getDb().prepare(`
-    UPDATE transactions SET trade_date = ?, ticker = ?, name = ?, side = ?, qty = ?, price = ?, fee = ?, currency = ?, note = ?, updated_at = ?
+    UPDATE transactions SET trade_date = ?, ticker = ?, name = ?, side = ?, qty = ?, price = ?, fee = ?, currency = ?, note = ?, updated_at = ?, import_batch_id = NULL
     WHERE id = ? AND portfolio_id = ?
   `).run(data.trade_date, data.ticker, data.name, data.side, data.qty, data.price, data.fee,
     data.currency, data.note, nowIso(), id, portfolioId);
@@ -152,6 +157,16 @@ export function findDuplicateTransaction(portfolioId, data) {
   `).get(portfolioId, data.trade_date, data.ticker, data.side, data.qty, data.price) ?? null;
 }
 
+/** Deduplikacja przeplywu - odpowiednik powyzszej dla importu z pliku. */
+export function findDuplicateCashFlow(portfolioId, data) {
+  return getDb().prepare(`
+    SELECT * FROM cash_flows
+    WHERE portfolio_id = ? AND flow_date = ? AND type = ? AND currency = ?
+      AND ABS(amount - ?) < 1e-6
+    LIMIT 1
+  `).get(portfolioId, data.flow_date, data.type, data.currency, data.amount) ?? null;
+}
+
 // ------------------------------------------------------------ przeplywy gotowki
 
 export function listCashFlows(portfolioIds) {
@@ -169,9 +184,10 @@ export function insertCashFlow(portfolioId, input, ctx = {}) {
   const id = newId('cf_');
   try {
     getDb().prepare(`
-      INSERT INTO cash_flows (id, portfolio_id, flow_date, type, amount, currency, comment, source, external_id, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(id, portfolioId, data.flow_date, data.type, data.amount, data.currency, data.comment, data.source, data.external_id, at, at);
+      INSERT INTO cash_flows (id, portfolio_id, flow_date, type, amount, currency, comment, source, external_id, import_batch_id, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(id, portfolioId, data.flow_date, data.type, data.amount, data.currency, data.comment,
+      data.source, data.external_id, data.import_batch_id, at, at);
   } catch (err) {
     if (String(err.message).includes('UNIQUE')) throw conflict('duplicate_flow');
     throw err;
@@ -187,8 +203,9 @@ export function updateCashFlow(portfolioId, id, input, ctx = {}) {
     date: existing.flow_date, type: existing.type, amount: existing.amount,
     currency: existing.currency, comment: existing.comment, ...input,
   });
+  // Jak wyzej - edycja odpina przeplyw od wsadu importu.
   getDb().prepare(`
-    UPDATE cash_flows SET flow_date = ?, type = ?, amount = ?, currency = ?, comment = ?, updated_at = ?
+    UPDATE cash_flows SET flow_date = ?, type = ?, amount = ?, currency = ?, comment = ?, updated_at = ?, import_batch_id = NULL
     WHERE id = ? AND portfolio_id = ?
   `).run(data.flow_date, data.type, data.amount, data.currency, data.comment, nowIso(), id, portfolioId);
   audit({ userId: ctx.userId, portfolioId, action: 'cashflow.updated', entity: 'cash_flow', entityId: id, ip: ctx.ip });

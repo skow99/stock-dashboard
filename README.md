@@ -98,6 +98,7 @@ migrations.lock.json   sumy kontrolne wydanych migracji
 | [`docs/CONTRIBUTING.md`](docs/CONTRIBUTING.md) | przepływ pracy, testy, staging, cofanie zmian |
 | [`docs/MIGRATIONS.md`](docs/MIGRATIONS.md) | zmiany schematu na żywym systemie, expand/contract |
 | [`docs/RUNBOOK.md`](docs/RUNBOOK.md) | co robić, gdy coś padnie |
+| [`docs/IMPORT.md`](docs/IMPORT.md) | format plików CSV do importu, profile brokerskie, cofanie |
 | [`deploy/gcp/README.md`](deploy/gcp/README.md) | wdrożenie od zera, koszty, diagnostyka |
 
 ```bash

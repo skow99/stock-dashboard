@@ -71,6 +71,17 @@ export const MESSAGES = {
     duplicate_flow: 'Przeplyw o tym identyfikatorze zewnetrznym juz istnieje w portfelu',
     empty_import: 'Import wymaga tablicy transactions lub cashFlows',
 
+    // --- import z pliku
+    import_empty_file: 'Plik jest pusty',
+    import_no_rows: 'Plik nie zawiera zadnych wierszy z danymi - potrzebny naglowek i co najmniej jeden wiersz',
+    import_too_many_rows: 'Plik ma {got} wierszy, limit to {max}. Podziel go na czesci',
+    import_shape_unknown: 'Nie rozpoznano ukladu pliku. Brakuje kolumn: {missing}. Przypisz je recznie albo pobierz wzorzec',
+    import_nothing_to_insert: 'Nie ma czego zapisac - wszystkie wiersze sa duplikatami albo maja bledy',
+    import_row_invalid: 'Wiersz zawiera dane, ktorych nie da sie odczytac',
+    import_batch_not_found: 'Ten import nie istnieje',
+    import_batch_already_undone: 'Ten import zostal juz cofniety',
+    import_batch_not_reversible: 'Importu stanu portfela nie da sie cofnac - nadpisal poprzednie wartosci',
+
     // --- dane rynkowe i webhooki
     missing_symbol: 'Parametr symbol jest wymagany',
     unsupported_source: 'Nieobslugiwane zrodlo: {source}. Dostepne: {list}',
@@ -144,6 +155,17 @@ export const MESSAGES = {
     duplicate_transaction: 'A transaction with this external id already exists in the portfolio',
     duplicate_flow: 'A cash flow with this external id already exists in the portfolio',
     empty_import: 'Import requires a transactions or cashFlows array',
+
+    // --- file import
+    import_empty_file: 'The file is empty',
+    import_no_rows: 'The file contains no data rows - a header and at least one row are required',
+    import_too_many_rows: 'The file has {got} rows, the limit is {max}. Please split it',
+    import_shape_unknown: 'Could not recognise the file layout. Missing columns: {missing}. Map them manually or download a template',
+    import_nothing_to_insert: 'Nothing to save - every row is either a duplicate or invalid',
+    import_row_invalid: 'This row contains data that cannot be read',
+    import_batch_not_found: 'This import does not exist',
+    import_batch_already_undone: 'This import has already been undone',
+    import_batch_not_reversible: 'A holdings import cannot be undone - it overwrote the previous values',
 
     // --- market data and webhooks
     missing_symbol: 'The symbol parameter is required',

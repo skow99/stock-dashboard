@@ -8,6 +8,12 @@
       "version": 1,
       "sha256": "fa766fcb80b58756",
       "addedAt": "2026-08-23"
+    },
+    {
+      "index": 1,
+      "version": 2,
+      "sha256": "3211db98ae042f2d",
+      "addedAt": "2026-08-23"
     }
   ]
 }

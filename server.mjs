@@ -21,6 +21,7 @@ import { registerDashboardRoutes } from './src/routes/dashboard.mjs';
 import { registerShareRoutes } from './src/routes/share.mjs';
 import { registerWebhookRoutes } from './src/routes/webhook.mjs';
 import { registerAdminRoutes } from './src/routes/admin.mjs';
+import { registerImportRoutes } from './src/routes/import.mjs';
 import { flushQuoteCache } from './src/market/quotes.mjs';
 import { flushHistoryCache } from './src/market/history.mjs';
 
@@ -40,12 +41,13 @@ registerDashboardRoutes(router);
 registerShareRoutes(router, { basePath: BASE });
 registerWebhookRoutes(router);
 registerAdminRoutes(router, { basePath: BASE });
+registerImportRoutes(router);
 
 // ---------------------------------------------------------------- statyki
 // Whitelist zamiast otwartego katalogu: serwer nie wyda niczego, czego nie wymieniono jawnie.
 const STATIC_PAGES = new Set([
   '', 'index.html', 'login.html', 'share.html',
-  'app.js', 'auth.js', 'share.js', 'ui.js', 'charts.js', 'i18n.js',
+  'app.js', 'auth.js', 'share.js', 'ui.js', 'charts.js', 'i18n.js', 'import.js',
   'styles.css', 'favicon.svg',
 ]);
 

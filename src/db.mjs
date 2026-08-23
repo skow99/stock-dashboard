@@ -187,6 +187,28 @@ export const MIGRATIONS = [
   );
   CREATE INDEX idx_webhook_at ON webhook_log(at);
   `,
+
+  // 2 - wsady importu (expand: nowa tabela + kolumny NULL-owalne, nic nie usuwamy)
+  `
+  CREATE TABLE import_batches (
+    id            TEXT PRIMARY KEY,
+    portfolio_id  TEXT NOT NULL REFERENCES portfolios(id) ON DELETE CASCADE,
+    user_id       TEXT REFERENCES users(id) ON DELETE SET NULL,
+    kind          TEXT NOT NULL,                        -- transactions | cashflows | holdings
+    profile       TEXT NOT NULL DEFAULT 'canonical',    -- canonical | xtb | ibkr
+    filename      TEXT NOT NULL DEFAULT '',
+    row_count     INTEGER NOT NULL DEFAULT 0,           -- wierszy zapisanych
+    skipped_count INTEGER NOT NULL DEFAULT 0,           -- duplikatow pominietych
+    created_at    TEXT NOT NULL,
+    undone_at     TEXT                                  -- znacznik cofniecia; wiersz zostaje dla historii
+  );
+  CREATE INDEX idx_import_portfolio ON import_batches(portfolio_id, created_at);
+
+  ALTER TABLE transactions ADD COLUMN import_batch_id TEXT;
+  ALTER TABLE cash_flows   ADD COLUMN import_batch_id TEXT;
+  CREATE INDEX idx_tx_batch    ON transactions(import_batch_id) WHERE import_batch_id IS NOT NULL;
+  CREATE INDEX idx_flows_batch ON cash_flows(import_batch_id)   WHERE import_batch_id IS NOT NULL;
+  `,
 ];
 
 function nowIso() {

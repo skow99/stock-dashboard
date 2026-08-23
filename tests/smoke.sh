@@ -199,6 +199,68 @@ check "nieznany plik = 404" \
 check "przekierowanie z / " \
   "$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:$PORT/")" "302"
 
+echo "== import z pliku"
+# Plik w Windows-1250, ze srednikiem i przecinkiem dziesietnym - tak zapisuje Excel PL.
+# Kodujemy go w base64 dokladnie tak, jak robi to przegladarka.
+IMPORT_B64=$(python3 -c "
+import base64
+wiersze = [
+    'data;ticker;strona;ilosc;cena;prowizja;waluta;nazwa',
+    '15.01.2026;AAPL.US;Kupno;10;185,50;1,20;USD;Apple Inc',
+    '02.03.2026;MSFT.US;Sprzedaż;5;400,00;1,00;USD;Microsoft',
+    'zla data;XXX;Kupno;5;10;0;USD;Wiersz bledny',
+]
+print(base64.b64encode('\r\n'.join(wiersze).encode('cp1250')).decode())
+")
+IMPORT_BODY=$(python3 -c "
+import json,sys
+print(json.dumps({'contentBase64': sys.argv[1], 'filename': 'historia.csv'}))
+" "$IMPORT_B64")
+
+# PF2 ma juz transakcje z wczesniejszej sekcji - liczymy od stanu biezacego,
+# zeby test nie zalezal od kolejnosci sekcji w tym pliku.
+TX_PRZED=$(curl -s -b "$JAR" "$B/portfolios/$PF2/transactions" | jqp "len(d['transactions'])")
+
+PREV=$(curl -s "${AUTH[@]}" -X POST "$B/portfolios/$PF2/import/analyze" -d "$IMPORT_BODY")
+check "podglad rozpoznaje transakcje" "$(echo "$PREV" | jqp "d['preview']['shape']")" "transactions"
+check "podglad wykrywa Windows-1250" "$(echo "$PREV" | jqp "d['preview']['encoding']")" "windows-1250"
+check "podglad wykrywa srednik" "$(echo "$PREV" | jqp "d['preview']['delimiter']")" ";"
+check "podglad wykrywa przecinek dziesietny" "$(echo "$PREV" | jqp "d['preview']['numberStyle']")" "comma"
+check "podglad: 2 wiersze do zapisania" "$(echo "$PREV" | jqp "d['preview']['willInsert']")" "2"
+check "podglad: 1 wiersz odrzucony" "$(echo "$PREV" | jqp "d['preview']['counts']['error']")" "1"
+check "podglad wskazuje numer bledneg wiersza" "$(echo "$PREV" | jqp "d['preview']['problems'][0]['line']")" "4"
+check "polskie znaki przetrwaly kodowanie" \
+  "$(echo "$PREV" | jqp "[s for s in d['preview']['samples'] if s['value']['side']=='SELL'][0]['value']['ticker']")" "MSFT.US"
+check "podglad niczego nie zapisal" \
+  "$(curl -s -b "$JAR" "$B/portfolios/$PF2/transactions" | jqp "len(d['transactions'])")" "$TX_PRZED"
+
+COMMIT=$(curl -s "${AUTH[@]}" -X POST "$B/portfolios/$PF2/import/commit" -d "$IMPORT_BODY")
+check "zapis wstawil 2 wiersze" "$(echo "$COMMIT" | jqp "d['result']['inserted']")" "2"
+check "transakcje sa w portfelu" \
+  "$(curl -s -b "$JAR" "$B/portfolios/$PF2/transactions" | jqp "len(d['transactions'])")" "$((TX_PRZED + 2))"
+
+PREV2=$(curl -s "${AUTH[@]}" -X POST "$B/portfolios/$PF2/import/analyze" -d "$IMPORT_BODY")
+check "powtorny import to same duplikaty" "$(echo "$PREV2" | jqp "d['preview']['counts']['duplicate']")" "2"
+check "powtorny zapis odrzucony" \
+  "$(curl -s "${AUTH[@]}" -X POST "$B/portfolios/$PF2/import/commit" -d "$IMPORT_BODY" | jqp "d['error']['code']")" "import_nothing_to_insert"
+
+BATCH=$(curl -s -b "$JAR" "$B/portfolios/$PF2/import/batches" | jqp "d['batches'][0]['id']")
+check "wsad widoczny w historii" "$([[ "$BATCH" == imp_* ]] && echo yes)" "yes"
+check "import bez CSRF odrzucony" \
+  "$(curl -s -b "$JAR" -X POST "$B/portfolios/$PF2/import/analyze" -H 'content-type: application/json' -d "$IMPORT_BODY" | jqp "d['error']['code']")" "csrf_missing"
+check "cudzy portfel niedostepny dla importu" \
+  "$(curl -s "${AUTH[@]}" -X POST "$B/portfolios/pf_nieistnieje/import/analyze" -d "$IMPORT_BODY" | jqp "d['error']['code']")" "portfolio_not_found"
+
+check "cofniecie usuwa 2 wiersze" \
+  "$(curl -s "${AUTH[@]}" -X DELETE "$B/portfolios/$PF2/import/batches/$BATCH" | jqp "d['result']['removed']")" "2"
+check "cofniecie nie ruszylo wczesniejszych wierszy" \
+  "$(curl -s -b "$JAR" "$B/portfolios/$PF2/transactions" | jqp "len(d['transactions'])")" "$TX_PRZED"
+check "drugie cofniecie odrzucone" \
+  "$(curl -s "${AUTH[@]}" -X DELETE "$B/portfolios/$PF2/import/batches/$BATCH" | jqp "d['error']['code']")" "import_batch_already_undone"
+
+check "wzorzec CSV do pobrania" \
+  "$(curl -s -b "$JAR" "$B/import/template?kind=transactions" | head -1 | grep -c 'ticker')" "1"
+
 echo "== wylogowanie"
 curl -s -b "$JAR" -X POST "$B/auth/logout" >/dev/null
 check "po wylogowaniu brak dostepu" "$(curl -s -b "$JAR" "$B/dashboard" | jqp "d['error']['code']")" "unauthorized"

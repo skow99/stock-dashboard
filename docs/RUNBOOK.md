@@ -211,6 +211,25 @@ gcloud compute instances describe stock-dashboard --zone us-central1-a \
   --format='get(metadata.items[].key)'   # 'enable-oslogin' musi byc TRUE
 ```
 
+## CI: `Cannot find module` przy próbie generalnej migracji
+
+```
+Error: Cannot find module '/tmp/tmp.XXXXXX/stock-dashboard/scripts/migrate-rehearse.mjs'
+[x] Proba generalna migracji NIE POWIODLA SIE. Produkcja nietknieta.
+```
+
+Plik **jest** na miejscu. `mktemp -d` tworzy katalog z prawami `700`, a `release.sh` biegnie jako root — próbę generalną uruchamiamy natomiast na koncie `sdapp`, które nie ma prawa wejść do katalogu roota. Node zgłasza wtedy brak modułu, a nie brak uprawnień, i to myli.
+
+Ostatnia linia jest ważna: **produkcja pozostała nietknięta.** Bramka zadziałała zgodnie z projektem — zatrzymała wydanie przed dotknięciem bazy.
+
+Naprawione przez `chmod 755` na katalogu tymczasowym przed rozpakowaniem. Ta sama pułapka wystąpiła w trzech miejscach (`sanitize-db.mjs`, katalog danych stagingu, katalog próby generalnej), więc pilnuje jej teraz test: `tests/deploy-scripts.test.mjs` wymaga jawnych praw wszędzie tam, gdzie z katalogu `mktemp` cokolwiek biegnie jako `sdapp`.
+
+Sprawdzenie na maszynie:
+
+```bash
+vm --command 'ls -ld $(sudo ls -d /tmp/tmp.* 2>/dev/null | head -1)'   # ma byc drwxr-xr-x
+```
+
 ## CI: krok „Wydanie na staging" pada od razu
 
 Objaw: `EACCES: permission denied` w logu kroku, wydanie kończy się po kilku sekundach.

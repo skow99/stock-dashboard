@@ -54,6 +54,11 @@ health() {
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
+# 'mktemp -d' daje prawa 700, a skrypt biegnie jako root. Proba generalna migracji
+# uruchamia sie na koncie sdapp i musi tu wejsc - bez tego node zglasza
+# "Cannot find module", mimo ze plik lezy na miejscu. Archiwum nie zawiera .env
+# ani bazy, wiec odczyt dla innych nie odslania niczego wrazliwego.
+chmod 755 "$TMP"
 tar -xzf "$ARCHIVE" -C "$TMP"
 NEW_CODE="$TMP/stock-dashboard"
 [[ -f "$NEW_CODE/server.mjs" ]] || fail "Archiwum nie zawiera server.mjs"

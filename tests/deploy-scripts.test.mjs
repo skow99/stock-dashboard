@@ -159,6 +159,60 @@ test('samo wydanie nie jest ponawiane automatycznie', () => {
   }
 });
 
+// ---------------------------------------------------------------- awaria z 23.08.2026, runda 3
+
+test('katalog z mktemp dostaje prawa, jesli siega do niego konto aplikacji', () => {
+  // 'mktemp -d' tworzy katalog 700. Skrypt biegnie jako root, wiec jemu to nie
+  // przeszkadza - ale czesc pracy wykonuje konto sdapp i bez prawa wejscia node
+  // zglasza "Cannot find module", mimo ze plik lezy dokladnie tam, gdzie powinien.
+  //
+  // Wymagamy praw TYLKO tam, gdzie sdapp naprawde siega. Katalog uzywany wylacznie
+  // przez roota (np. rozpakowanie przed rsync w bootstrap.sh) jest w porzadku jako 700 -
+  // ciasniejsze prawa to domyslnie lepiej.
+  for (const file of scripts) {
+    const source = codeOnly(read(file));
+    const liniekSudo = source.split('\n').filter((l) => /sudo\s+-u\s+"?\$\{?APP_USER\}?"?/.test(l));
+
+    for (const match of source.matchAll(/(\w+)="\$\(mktemp -d\)"/g)) {
+      const zmienna = match[1];
+
+      // Zmienne wyprowadzone, np. NEW_CODE="$TMP/stock-dashboard" - to przez nie
+      // sdapp trafial do katalogu tymczasowego, wiec samo szukanie "$TMP" nie wystarczy.
+      const pochodne = [zmienna];
+      for (const p of source.matchAll(new RegExp(`(\\w+)="\\$${zmienna}[/"]`, 'g'))) {
+        pochodne.push(p[1]);
+      }
+
+      const uzywaSdapp = liniekSudo.some((l) => pochodne.some((v) => l.includes(`$${v}`)));
+      if (!uzywaSdapp) continue;
+
+      const chmodNaNiej = new RegExp(`chmod[^\\n]*"\\$${zmienna}"`);
+      assert.match(source, chmodNaNiej,
+        `${file}: z katalogu $${zmienna} (mktemp, prawa 700) cos biegnie jako $APP_USER, `
+        + `a katalog nie dostaje jawnych praw - skonczy sie "Cannot find module"`);
+    }
+  }
+});
+
+test('kod do proby generalnej jest dostepny dla konta aplikacji', () => {
+  const source = codeOnly(read('release.sh'));
+  const chmod = source.search(/chmod 755 "\$TMP"/);
+  const rozpakowanie = source.search(/tar -xzf "\$ARCHIVE" -C "\$TMP"/);
+  const proba = source.search(/migrate-rehearse\.mjs/);
+
+  assert.ok(chmod > -1, 'brak chmod na katalogu, z ktorego uruchamiamy probe generalna');
+  assert.ok(chmod < rozpakowanie, 'prawa ustawiamy przed rozpakowaniem, nie po');
+  assert.ok(chmod < proba, 'prawa musza byc gotowe, zanim sdapp siegnie po skrypt');
+});
+
+test('kopia bazy do proby generalnej jest zapisywalna dla sdapp', () => {
+  const source = codeOnly(read('release.sh'));
+  const chmod = source.search(/chmod -R 777 "\$REH_DIR"/);
+  const proba = source.search(/migrate-rehearse\.mjs/);
+  assert.ok(chmod > -1 && chmod < proba,
+    'REH_DIR musi byc dostepny dla sdapp PRZED proba generalna - migracja zapisuje do kopii');
+});
+
 // ---------------------------------------------------------------- bramki produkcyjne
 
 test('produkcja nie moze isc bez kopii zapasowej i proby generalnej migracji', () => {

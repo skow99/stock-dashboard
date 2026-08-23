@@ -27,6 +27,18 @@ jobs:
     timeout-minutes: 20
     environment: production
 
+    # Jeden zestaw flag dla WSZYSTKICH wywolan ssh. Wczesniej czesc krokow go nie miala
+    # i mogla zawisnac na pytaniu o klucz hosta, ktorego nikt nie zobaczy.
+    # Zapis -oNazwa=wartosc (bez spacji) przezywa podzial slow w powloce.
+    env:
+      SSH_FLAGS: >-
+        --ssh-flag=-oStrictHostKeyChecking=no
+        --ssh-flag=-oUserKnownHostsFile=/dev/null
+        --ssh-flag=-oBatchMode=yes
+        --ssh-flag=-oConnectTimeout=20
+        --ssh-flag=-oServerAliveInterval=15
+        --ssh-flag=-oServerAliveCountMax=4
+
     steps:
       - uses: actions/checkout@v4
 
@@ -61,11 +73,7 @@ jobs:
           for i in $(seq 1 6); do
             if timeout 45 gcloud compute ssh "${{ vars.GCP_VM_NAME }}" \
                  --zone "${{ vars.GCP_ZONE }}" --tunnel-through-iap --quiet \
-                 --ssh-flag="-o StrictHostKeyChecking=no" \
-                 --ssh-flag="-o UserKnownHostsFile=/dev/null" \
-                 --ssh-flag="-o BatchMode=yes" \
-                 --ssh-flag="-o ConnectTimeout=20" \
-                 --command="echo polaczenie-ok"; then
+                 $SSH_FLAGS --command="echo polaczenie-ok"; then
               echo "Polaczenie dziala (proba $i)"
               exit 0
             fi
@@ -76,16 +84,43 @@ jobs:
           echo "Sprawdz: reguly firewalla dla 35.235.240.0/20 oraz role konta uslugowego."
           exit 1
 
+      # NIE uzywamy 'gcloud compute scp'. Od OpenSSH 9.0 scp przesyla dane podsystemem
+      # SFTP, a ten w polaczeniu z tunelem IAP potrafi zawisnac na glucho - runner ma
+      # OpenSSH 9.6, wiec trafia dokladnie w ten przypadek (obserwowane: kod 124 z timeout
+      # przy paczce 164 kB, czyli na pewno nie przepustowosc).
+      #
+      # Sonda powyzej udowodnila, ze 'ssh --command' dziala. Wysylamy wiec plik ta sama
+      # droga - strumieniem na standardowe wejscie. Flaga -T wylacza pseudoterminal;
+      # bez niej terminal przerobilby konce linii i paczka dotarlaby uszkodzona.
       - name: Wyslanie na maszyne
-        timeout-minutes: 5
+        timeout-minutes: 8
         run: |
-          timeout 240 gcloud compute scp /tmp/stock-dashboard.tar.gz \
-            "${{ vars.GCP_VM_NAME }}":~/release.tar.gz \
+          set -euo pipefail
+          ROZMIAR=$(stat -c%s /tmp/stock-dashboard.tar.gz)
+          SUMA_LOKALNA=$(sha256sum /tmp/stock-dashboard.tar.gz | cut -d' ' -f1)
+          echo "Paczka: $ROZMIAR B, sha256 ${SUMA_LOKALNA:0:16}..."
+
+          START=$(date +%s)
+          timeout 360 gcloud compute ssh "${{ vars.GCP_VM_NAME }}" \
             --zone "${{ vars.GCP_ZONE }}" --tunnel-through-iap --quiet \
-            --scp-flag="-o StrictHostKeyChecking=no" \
-            --scp-flag="-o UserKnownHostsFile=/dev/null" \
-            --scp-flag="-o BatchMode=yes" \
-            --scp-flag="-o ConnectTimeout=20"
+            $SSH_FLAGS --ssh-flag=-T \
+            --command='cat > ~/release.tar.gz' < /tmp/stock-dashboard.tar.gz
+          echo "Przeslano w $(( $(date +%s) - START )) s"
+
+          # Bez tego sprawdzenia uszkodzona paczka wyszlaby na jaw dopiero przy
+          # rozpakowaniu na maszynie - juz po zatrzymaniu uslugi.
+          SUMA_ZDALNA=$(timeout 60 gcloud compute ssh "${{ vars.GCP_VM_NAME }}" \
+            --zone "${{ vars.GCP_ZONE }}" --tunnel-through-iap --quiet \
+            $SSH_FLAGS --command='sha256sum ~/release.tar.gz' 2>/dev/null \
+            | tr -d '\r' | grep -oE '[0-9a-f]{64}' | head -1)
+
+          if [ "$SUMA_LOKALNA" != "$SUMA_ZDALNA" ]; then
+            echo "Paczka dotarla uszkodzona."
+            echo "  lokalnie: $SUMA_LOKALNA"
+            echo "  na maszynie: ${SUMA_ZDALNA:-brak odpowiedzi}"
+            exit 1
+          fi
+          echo "Suma kontrolna na maszynie zgadza sie z lokalna."
 
       # Staging dostaje sanityzowana kopie produkcji: prawdziwy ksztalt danych,
       # zadnych dzialajacych poswiadczen.
@@ -94,19 +129,17 @@ jobs:
       - name: Wydanie na staging
         timeout-minutes: 6
         run: |
-          gcloud compute ssh "${{ vars.GCP_VM_NAME }}" \
+          timeout 330 gcloud compute ssh "${{ vars.GCP_VM_NAME }}" \
             --zone "${{ vars.GCP_ZONE }}" --tunnel-through-iap --quiet \
-            --ssh-flag="-o StrictHostKeyChecking=no" \
-            --ssh-flag="-o UserKnownHostsFile=/dev/null" \
-            --ssh-flag="-o BatchMode=yes" \
-            --ssh-flag="-o ConnectTimeout=20" \
+            $SSH_FLAGS \
             --command 'set -e; W=$(mktemp -d); tar -xzf ~/release.tar.gz -C "$W"; sudo bash "$W/stock-dashboard/deploy/gcp/release.sh" ~/release.tar.gz staging; rm -rf "$W"'
 
       - name: Smoke test stagingu
         timeout-minutes: 3
         run: |
-          gcloud compute ssh "${{ vars.GCP_VM_NAME }}" \
+          timeout 160 gcloud compute ssh "${{ vars.GCP_VM_NAME }}" \
             --zone "${{ vars.GCP_ZONE }}" --tunnel-through-iap --quiet \
+            $SSH_FLAGS \
             --command '
               set -e
               curl -fsS http://127.0.0.1:8788/stock-dashboard/api/v1/health | grep -q "\"ok\":true"
@@ -119,12 +152,9 @@ jobs:
       - name: Wydanie na produkcje
         timeout-minutes: 6
         run: |
-          gcloud compute ssh "${{ vars.GCP_VM_NAME }}" \
+          timeout 330 gcloud compute ssh "${{ vars.GCP_VM_NAME }}" \
             --zone "${{ vars.GCP_ZONE }}" --tunnel-through-iap --quiet \
-            --ssh-flag="-o StrictHostKeyChecking=no" \
-            --ssh-flag="-o UserKnownHostsFile=/dev/null" \
-            --ssh-flag="-o BatchMode=yes" \
-            --ssh-flag="-o ConnectTimeout=20" \
+            $SSH_FLAGS \
             --command 'set -e; W=$(mktemp -d); tar -xzf ~/release.tar.gz -C "$W"; sudo bash "$W/stock-dashboard/deploy/gcp/release.sh" ~/release.tar.gz production; rm -rf "$W"'
 
       - name: Weryfikacja publiczna

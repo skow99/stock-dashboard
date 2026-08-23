@@ -162,6 +162,25 @@ gcloud iam service-accounts add-iam-policy-binding "$VM_SA" \
 
 Od wersji z sierpnia 2026 `setup-cicd.sh` nadaje to sam.
 
+## CI: krok „Wysłanie na maszynę" wisi i kończy się kodem 124
+
+Kod 124 to `timeout`, który ubił zawieszone polecenie — nie błąd uprawnień.
+
+Przyczyna: **`gcloud compute scp` przez tunel IAP**. Od OpenSSH 9.0 `scp` przesyła dane podsystemem SFTP, a ten w połączeniu z tunelem IAP potrafi zawisnąć bez żadnego komunikatu. Runner GitHuba (`ubuntu-latest`) ma OpenSSH 9.6, więc trafia dokładnie w ten przypadek.
+
+Rozpoznanie po objawach: krok **„Sprawdzenie połączenia z maszyną" przechodzi**, a wysyłka wisi. Znaczy to, że SSH, IAP, firewall i uprawnienia są sprawne — problem dotyczy wyłącznie ścieżki scp.
+
+Rozwiązanie zastosowane od sierpnia 2026: pliku nie przesyłamy przez `scp`, tylko strumieniem przez to samo `ssh`, które działa:
+
+```bash
+gcloud compute ssh VM --zone ZONE --tunnel-through-iap --quiet \
+  --ssh-flag=-T --command='cat > ~/release.tar.gz' < paczka.tar.gz
+```
+
+Flaga `-T` jest obowiązkowa — bez niej pseudoterminal przerobi końce linii i paczka dotrze uszkodzona. Krok weryfikuje `sha256sum` po obu stronach, więc uszkodzenie zatrzyma wdrożenie, zanim ktokolwiek zatrzyma usługę.
+
+Gdyby mimo to wisiało: sprawdź, czy wisi też zwykłe `vm --command 'echo test'`. Jeśli tak, problem jest w IAP albo OS Login, nie w przesyle — patrz sekcja o `actAs` powyżej.
+
 ## Utracone hasło właściciela
 
 ```bash

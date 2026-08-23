@@ -49,6 +49,27 @@ for ROLE in roles/compute.viewer roles/iap.tunnelResourceAccessor roles/compute.
   echo "    $ROLE"
 done
 
+# Maszyna dziala na wlasnym koncie uslugowym (domyslnie tym z Compute Engine).
+# Zeby 'gcloud compute ssh/scp' moglo sie do niej podlaczyc, konto wdrozeniowe musi miec
+# prawo "actAs" na koncie maszyny - inaczej dostaniemy:
+#   PERMISSION_DENIED: User does not have iam.serviceAccounts.actAs permission
+#     on the instance's service account.
+VM_NAME_PROBE="${VM_NAME:-stock-dashboard}"
+ZONE_PROBE="${ZONE:-us-central1-a}"
+VM_SA="$(gcloud compute instances describe "$VM_NAME_PROBE" --zone "$ZONE_PROBE" \
+  --project "$PROJECT_ID" --format='get(serviceAccounts[0].email)' 2>/dev/null || true)"
+
+if [[ -n "$VM_SA" ]]; then
+  info "Nadaje prawo actAs na koncie maszyny ($VM_SA)"
+  gcloud iam service-accounts add-iam-policy-binding "$VM_SA" \
+    --project "$PROJECT_ID" \
+    --member="serviceAccount:${SA_EMAIL}" \
+    --role="roles/iam.serviceAccountUser" --quiet >/dev/null
+else
+  echo "    UWAGA: nie odczytalem konta uslugowego maszyny $VM_NAME_PROBE ($ZONE_PROBE)."
+  echo "    Jesli maszyna jeszcze nie istnieje, uruchom ten skrypt ponownie po jej utworzeniu."
+fi
+
 # ---------------------------------------------------------------- pula tozsamosci
 if ! gcloud iam workload-identity-pools describe "$POOL" \
      --project "$PROJECT_ID" --location=global >/dev/null 2>&1; then

@@ -148,6 +148,20 @@ vm --command 'sudo journalctl --vacuum-size=200M'
 vm --command 'sudo -u sdapp env SD_DATA_DIR=/var/lib/stock-dashboard SD_DB_PATH=/var/lib/stock-dashboard/dashboard.db node /opt/stock-dashboard/scripts/admin.mjs vacuum'
 ```
 
+## CI: `iam.serviceAccounts.actAs permission` przy `gcloud compute scp/ssh`
+
+Maszyna działa na własnym koncie usługowym. Konto wdrożeniowe musi mieć prawo `actAs` na koncie maszyny:
+
+```bash
+VM_SA=$(gcloud compute instances describe stock-dashboard --zone us-central1-a \
+  --format='get(serviceAccounts[0].email)')
+gcloud iam service-accounts add-iam-policy-binding "$VM_SA" \
+  --member="serviceAccount:github-deployer@$(gcloud config get-value project).iam.gserviceaccount.com" \
+  --role="roles/iam.serviceAccountUser"
+```
+
+Od wersji z sierpnia 2026 `setup-cicd.sh` nadaje to sam.
+
 ## Utracone hasło właściciela
 
 ```bash

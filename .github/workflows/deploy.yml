@@ -111,15 +111,25 @@ jobs:
 
           # Bez tego sprawdzenia uszkodzona paczka wyszlaby na jaw dopiero przy
           # rozpakowaniu na maszynie - juz po zatrzymaniu uslugi.
-          SUMA_ZDALNA=$(timeout 60 gcloud compute ssh "${{ vars.GCP_VM_NAME }}" \
+          #
+          # UWAGA na 'set -e': nieudany grep w podstawieniu $(...) przerywa CALY krok,
+          # zanim zdazymy cokolwiek wypisac. Wtedy krok raportuje porazke mimo udanego
+          # przesylu, a w logu nie ma sladu dlaczego. Stad '|| true' i osobna diagnoza.
+          ODPOWIEDZ=$(timeout 60 gcloud compute ssh "${{ vars.GCP_VM_NAME }}" \
             --zone "${{ vars.GCP_ZONE }}" --tunnel-through-iap --quiet \
-            $SSH_FLAGS --command='sha256sum ~/release.tar.gz' 2>/dev/null \
-            | tr -d '\r' | grep -oE '[0-9a-f]{64}' | head -1)
+            $SSH_FLAGS --command='sha256sum ~/release.tar.gz' 2>&1 || true)
+          SUMA_ZDALNA=$(printf '%s' "$ODPOWIEDZ" | tr -d '\r' | grep -oE '[0-9a-f]{64}' | head -1 || true)
 
+          if [ -z "$SUMA_ZDALNA" ]; then
+            echo "Nie udalo sie odczytac sumy kontrolnej z maszyny."
+            echo "Surowa odpowiedz:"
+            printf '%s\n' "$ODPOWIEDZ" | sed 's/^/  | /'
+            exit 1
+          fi
           if [ "$SUMA_LOKALNA" != "$SUMA_ZDALNA" ]; then
             echo "Paczka dotarla uszkodzona."
-            echo "  lokalnie: $SUMA_LOKALNA"
-            echo "  na maszynie: ${SUMA_ZDALNA:-brak odpowiedzi}"
+            echo "  lokalnie:    $SUMA_LOKALNA"
+            echo "  na maszynie: $SUMA_ZDALNA"
             exit 1
           fi
           echo "Suma kontrolna na maszynie zgadza sie z lokalna."

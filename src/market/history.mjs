@@ -49,7 +49,16 @@ async function fromGpw(symbol) {
     if (Number.isFinite(value)) points.push({ day: match[1], value });
     match = re.exec(text);
   }
-  return points.length ? { providerSymbol: gpwSymbol, points, provider: 'gpw' } : null;
+  // Wzorzec jest luzny, bo strona nie ma stabilnej struktury. Kilka trafien to
+  // przypadkowe liczby z tresci, a nie seria notowan - takie "dane" na wykresie
+  // sa gorsze niz ich brak, bo wygladaja wiarygodnie. Zadamy serii, nie okruchow.
+  const MIN_PUNKTOW = 30;
+  const roznychDni = new Set(points.map((p) => p.day)).size;
+  if (points.length < MIN_PUNKTOW || roznychDni < MIN_PUNKTOW) {
+    log.debug('history.gpw_rejected', { symbol, points: points.length, roznychDni });
+    return null;
+  }
+  return { providerSymbol: gpwSymbol, points, provider: 'gpw' };
 }
 
 async function fetchSeries(symbol, range) {
@@ -187,9 +196,23 @@ export function closeOnOrBefore(seria, day, kursor = { day: null, value: null })
   return kursor.value;
 }
 
+/**
+ * Benchmarki wykresu indeksu portfela.
+ *
+ * Polskie indeksy NIE maja historii dziennej u zadnego dostepnego dostawcy:
+ * Yahoo pod '^WIG20' oddaje zero punktow, a pod 'WIG20.WA' jedna wartosc (dzisiejsza).
+ * Archiwum GPW nie da sie juz sparsowac. Dlatego jako serie bierzemy notowania
+ * funduszy, ktore te indeksy odwzorowuja - maja prawdziwa historie dzienna
+ * i sa w PLN.
+ *
+ * To swiadome przyblizenie i etykieta o tym mowi. Fundusz rozni sie od indeksu
+ * o oplate za zarzadzanie i blad odwzorowania (rzedu ulamka procenta rocznie).
+ * W zamian jest to wariant TOTAL RETURN, czyli z dywidendami - a wiec porownywalny
+ * z wykresem TWR portfela, ktory dywidendy uwzglednia.
+ */
 export const BENCHMARKS = [
-  { id: 'WIG20', label: 'WIG20', symbol: '^WIG20' },
-  { id: 'MWIG40TR', label: 'mWIG40TR', symbol: 'MWIG40TR' },
-  { id: 'NDX', label: 'Nasdaq 100', symbol: '^NDX' },
-  { id: 'SPX', label: 'S&P 500', symbol: '^GSPC' },
+  { id: 'WIG20', label: 'WIG20TR', symbol: 'ETFBW20TR.WA', proxy: 'Beta ETF WIG20TR' },
+  { id: 'MWIG40TR', label: 'mWIG40TR', symbol: 'ETFBM40TR.WA', proxy: 'Beta ETF mWIG40TR' },
+  { id: 'NDX', label: 'Nasdaq 100', symbol: '^NDX', proxy: null },
+  { id: 'SPX', label: 'S&P 500', symbol: '^GSPC', proxy: null },
 ];

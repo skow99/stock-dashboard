@@ -58,8 +58,18 @@ export async function rebuildPortfolioHistory(portfolioId, { from = null } = {})
     ...cashFlows.map((f) => dzien(f.flow_date)),
   ].filter(Boolean).sort();
 
-  const pierwszy = from ? dzien(from) : daty[0];
   const ostatni = todayWarsaw();
+  let pierwszy = from ? dzien(from) : daty[0];
+
+  // Limit chroni przed data wpisana omylkowo (rok 1900) i przed praca bez konca.
+  // Obcinamy POCZATEK, nie koniec: gdyby przebieg konczyl sie po MAX_DNI od zlej daty,
+  // z wykresu zniknelyby ostatnie lata - czyli dokladnie to, na czym zalezy najbardziej.
+  const najwczesniejszy = addDays(ostatni, -MAX_DNI);
+  if (pierwszy < najwczesniejszy) {
+    log.warn('history.range_capped', { portfolioId, zadany: pierwszy, uzyty: najwczesniejszy });
+    pierwszy = najwczesniejszy;
+  }
+
   if (!pierwszy || pierwszy > ostatni) {
     return { days: 0, from: null, to: ostatni, tickers: 0, skipped: 0, sources: [], missing: [] };
   }
@@ -141,7 +151,7 @@ export async function rebuildPortfolioHistory(portfolioId, { from = null } = {})
     const punkty = [];
     let pominietych = 0;
 
-    for (let d = pierwszy, licznik = 0; d <= ostatni && licznik < MAX_DNI; d = addDays(d, 1), licznik += 1) {
+    for (let d = pierwszy, licznik = 0; d <= ostatni && licznik <= MAX_DNI; d = addDays(d, 1), licznik += 1) {
       // Transakcje tego dnia: przesuwamy wskaznik i zaznaczamy, ze stan sie zmienil.
       while (txIdx < txPosortowane.length && dzien(txPosortowane[txIdx].trade_date) <= d) {
         txIdx += 1;
@@ -234,8 +244,17 @@ export async function rebuildPortfolioHistory(portfolioId, { from = null } = {})
 }
 
 /**
- * Zapis w jednej transakcji. Wpisy odtworzone oznaczamy jako 'rebuilt', zeby
- * pozniej bylo widac, ktore dni pochodza z rekonstrukcji, a ktore z zapisu na biezaco.
+ * Zapis w jednej transakcji: najpierw czyscimy historie portfela, potem wpisujemy
+ * policzona na nowo.
+ *
+ * Czyszczenie jest konieczne, a nie ostrozne. Sam upsert zostawialby wiersze,
+ * ktorych nowy przebieg juz nie dotyka - a to zdarza sie w najzwyklejszej sytuacji:
+ * wystarczy poprawic date transakcji wpisana omylkowo (2003 zamiast 2026), zeby
+ * dwadziescia lat pustego wykresu zostalo w bazie na zawsze i sciskalo prawdziwe dane
+ * do plaskiej linii przy zerze.
+ *
+ * Usuwanie i wstawianie dzieje sie w JEDNEJ transakcji, wiec nieudany przebieg
+ * nie zostawia portfela bez historii.
  */
 function zapiszPunkty(portfolioId, punkty) {
   if (!punkty.length) return;
@@ -252,10 +271,16 @@ function zapiszPunkty(portfolioId, punkty) {
 
   db.exec('BEGIN IMMEDIATE');
   try {
+    const usuniete = db.prepare('DELETE FROM portfolio_history WHERE portfolio_id = ?').run(portfolioId).changes;
     for (const p of punkty) {
       stmt.run(portfolioId, p.day, p.totalPln, p.investedPln, p.cashPln, p.provisional, at);
     }
     db.exec('COMMIT');
+    if (Number(usuniete) > punkty.length) {
+      log.info('history.stale_days_removed', {
+        portfolioId, usuniete: Number(usuniete), zapisane: punkty.length,
+      });
+    }
   } catch (err) {
     try { db.exec('ROLLBACK'); } catch { /* ignore */ }
     throw err;

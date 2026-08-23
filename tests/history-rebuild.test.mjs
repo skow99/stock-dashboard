@@ -276,6 +276,52 @@ test('raport zrodel pokazuje liczbe notowan dla tickera, ktory ma dane', async (
   assert.ok(zrodlo.first && zrodlo.last, 'raport musi podac zakres dat');
 });
 
+// ---------------------------------------------------------------- czyszczenie starych dni
+
+test('poprawienie omylkowej daty usuwa dni, ktorych juz nie ma w ksiedze', async () => {
+  // Prawdziwy przypadek: przeplyw wpisany z rokiem 2003 zamiast biezacego.
+  // Sam upsert zostawialby dwadziescia lat pustego wykresu, bo nowy przebieg
+  // po prostu tych dni nie dotyka.
+  const pid = nowyPortfel();
+  const { updateCashFlow } = await import('../src/ledger.mjs');
+
+  const omylka = insertCashFlow(pid, { date: '2003-05-14', type: 'Deposit', amount: 10000, currency: 'PLN' }, ctx());
+  await rebuildPortfolioHistory(pid);
+  const przed = listHistory([pid]);
+  // Zakres jest przycinany do 20 lat wstecz od DZIS, wiec zaczyna sie pozniej niz 2003,
+  // ale konczy dzisiaj - swieze dane nie moga wypasc przez omylke w starej dacie.
+  assert.ok(przed.length > 5000, `przygotowanie: spodziewalem sie lat historii, jest ${przed.length} dni`);
+  assert.equal(przed[przed.length - 1].day, DZIS, 'przyciecie nie moze obcinac konca zakresu');
+
+  updateCashFlow(pid, omylka.id, { date: START }, ctx());
+  const wynik = await rebuildPortfolioHistory(pid);
+  const po = listHistory([pid]);
+
+  assert.equal(wynik.from, START, 'zakres ma zaczynac sie od poprawionej daty');
+  assert.equal(po[0].day, START, 'pierwszy dzien historii nie zostal przesuniety');
+  assert.ok(po.length < 100, `stare dni zostaly w bazie: ${po.length} wierszy`);
+
+  const stare = getDb()
+    .prepare("SELECT COUNT(*) AS n FROM portfolio_history WHERE portfolio_id = ? AND day < ?")
+    .get(pid, START).n;
+  assert.equal(stare, 0, 'w bazie nie moze zostac ani jeden dzien sprzed nowego zakresu');
+});
+
+test('usuniecie wszystkich zdarzen nie kasuje historii po cichu', async () => {
+  // Portfel bez transakcji i przeplywow konczy sie wczesnym powrotem. Nie wolno
+  // wtedy skasowac tego, co zebral zapis biezacy - to nie jest przeliczenie.
+  const pid = nowyPortfel();
+  const at = nowIso();
+  getDb().prepare(`
+    INSERT INTO portfolio_history (portfolio_id, day, total_pln, invested_pln, cash_pln, provisional, source, updated_at)
+    VALUES (?, ?, ?, ?, ?, 0, 'eod', ?)
+  `).run(pid, START, 1234, 1000, 234, at);
+
+  const wynik = await rebuildPortfolioHistory(pid);
+  assert.equal(wynik.days, 0);
+  assert.equal(listHistory([pid]).length, 1, 'wpis EOD musi przetrwac przebieg bez zdarzen');
+});
+
 // ---------------------------------------------------------------- niezmiennik nadrzedny
 
 test('ostatni dzien historii zgadza sie z silnikiem widoku biezacego', async () => {

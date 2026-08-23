@@ -369,23 +369,33 @@ async function renderIndexChart() {
   const index = state.data.twrIndex ?? [];
   const limit = RANGE_POINTS[state.valueRange];
   const sliced = limit === Infinity ? index : index.slice(-limit);
-  if (sliced.length < 2) {
-    clear($('#chart-index')).append(multiLineChart([]));
-    metaRow($('#meta-index'), [[t('meta.status'), t('meta.notEnoughTwr')]]);
-    return;
-  }
-  const base = sliced[0].index || 100;
-  const portfolioSeries = sliced.map((p) => ({ day: p.day, value: (p.index / base) * 100 }));
-  const from = portfolioSeries[0].day;
 
-  const series = [{ label: t('chart.portfolio'), color: '#4fc3f7', points: portfolioSeries, emphasis: true }];
+  // Portfel bez historii TWR nie moze kasowac benchmarkow. Wczesniej ta funkcja
+  // konczyla sie tutaj, WIEC indeksy nie ladowaly sie wcale - a same w sobie sa
+  // czytelne i pokazuja, co robi rynek, nawet gdy portfel nie ma jeszcze serii.
+  const maPortfel = sliced.length >= 2;
+  const base = maPortfel ? (sliced[0].index || 100) : 100;
+  const portfolioSeries = maPortfel
+    ? sliced.map((p) => ({ day: p.day, value: (p.index / base) * 100 }))
+    : [];
+
+  // Bez serii portfela zakres bierzemy z samego wybranego okresu.
+  const from = maPortfel
+    ? portfolioSeries[0].day
+    : new Date(Date.now() - (limit === Infinity ? 3650 : limit) * 864e5).toISOString().slice(0, 10);
+
+  const series = maPortfel
+    ? [{ label: t('chart.portfolio'), color: '#4fc3f7', points: portfolioSeries, emphasis: true }]
+    : [];
+
   for (const [id, points] of await loadBenchmarks(state.valueRange)) {
     if (state.hiddenBenchmarks.has(id)) continue;
     const inRange = points.filter((p) => p.day >= from);
     if (inRange.length < 2) continue;
     const first = inRange[0].value;
+    const def = (await benchmarkDefs()).find((b) => b.id === id);
     series.push({
-      label: id, color: BENCHMARK_COLORS[id] ?? '#8b98c4', dashed: true,
+      label: def?.label ?? id, color: BENCHMARK_COLORS[id] ?? '#8b98c4', dashed: true,
       points: inRange.map((p) => ({ day: p.day, value: (p.value / first) * 100 })),
     });
   }
@@ -393,16 +403,19 @@ async function renderIndexChart() {
   clear($('#chart-index')).append(multiLineChart(series, { format: (v) => v.toFixed(0) }));
 
   const legend = clear($('#legend-index'));
-  legend.append(el('span', {}, [el('i', { style: 'background:#4fc3f7' }), t('chart.portfolio')]));
-  for (const id of Object.keys(BENCHMARK_COLORS)) {
-    const hidden = state.hiddenBenchmarks.has(id);
+  if (maPortfel) legend.append(el('span', {}, [el('i', { style: 'background:#4fc3f7' }), t('chart.portfolio')]));
+  for (const def of await benchmarkDefs()) {
+    const hidden = state.hiddenBenchmarks.has(def.id);
+    // Gdy benchmark jest liczony z notowan funduszu odwzorowujacego indeks, mowimy
+    // o tym w podpowiedzi - to przyblizenie i uzytkownik ma prawo o nim wiedziec.
     legend.append(el('span', {
       class: hidden ? 'off' : '',
+      title: def.proxy ? t('chart.benchmarkProxy', { proxy: def.proxy }) : null,
       onclick: () => {
-        if (hidden) state.hiddenBenchmarks.delete(id); else state.hiddenBenchmarks.add(id);
+        if (hidden) state.hiddenBenchmarks.delete(def.id); else state.hiddenBenchmarks.add(def.id);
         renderIndexChart();
       },
-    }, [el('i', { style: `background:${BENCHMARK_COLORS[id]}` }), id]));
+    }, [el('i', { style: `background:${BENCHMARK_COLORS[def.id] ?? '#8b98c4'}` }), def.label ?? def.id]));
   }
 
   const meta = seriesMeta(portfolioSeries);
@@ -412,22 +425,41 @@ async function renderIndexChart() {
     [t('meta.end'), fmtNum(meta.last, 1)],
     [t('meta.max'), `${fmtNum(meta.maxValue, 1)} (${meta.maxDay})`],
     [t('meta.change'), fmtPct(meta.last - 100), signClass(meta.last - 100)],
-  ] : []);
+  ] : [[t('meta.status'), t('meta.notEnoughTwr')]]);
 }
 
 /** Benchmarki sa cache'owane po stronie przegladarki - nie odpytujemy ich przy kazdym renderze. */
+/**
+ * Definicje benchmarkow pobieramy z backendu i trzymamy na czas zycia strony.
+ *
+ * Wczesniej mapa symboli byla przepisana tutaj z reki i rozjechala sie z backendem:
+ * frontend prosil o '^WIG20', pod ktorym Yahoo nie ma zadnych danych. Jedno zrodlo
+ * prawdy usuwa cala te klase bledow.
+ */
+let definicjeBenchmarkow = null;
+async function benchmarkDefs() {
+  if (definicjeBenchmarkow) return definicjeBenchmarkow;
+  try {
+    const res = await api('/benchmarks');
+    definicjeBenchmarkow = res.benchmarks ?? [];
+  } catch {
+    definicjeBenchmarkow = [];
+  }
+  return definicjeBenchmarkow;
+}
+
 async function loadBenchmarks(range) {
   const out = new Map();
-  const wanted = Object.keys(BENCHMARK_COLORS).filter((id) => !state.hiddenBenchmarks.has(id));
-  await Promise.all(wanted.map(async (id) => {
-    const key = `${id}|${range}`;
+  const defs = (await benchmarkDefs()).filter((b) => !state.hiddenBenchmarks.has(b.id));
+  await Promise.all(defs.map(async (def) => {
+    const key = `${def.id}|${range}`;
     const hit = state.benchmarks.get(key);
-    if (hit && Date.now() - hit.at < BENCHMARK_TTL_MS) { out.set(id, hit.points); return; }
+    if (hit && Date.now() - hit.at < BENCHMARK_TTL_MS) { out.set(def.id, hit.points); return; }
     try {
-      const symbol = { WIG20: '^WIG20', MWIG40TR: 'MWIG40TR', NDX: '^NDX', SPX: '^GSPC' }[id];
-      const res = await api(`/price-history?symbol=${encodeURIComponent(symbol)}&range=${range}`);
+      const res = await api(`/price-history?symbol=${encodeURIComponent(def.symbol)}&range=${range}`);
+      if (!res.points?.length) return;
       state.benchmarks.set(key, { at: Date.now(), points: res.points });
-      out.set(id, res.points);
+      out.set(def.id, res.points);
     } catch { /* benchmark jest opcjonalny - brak danych nie psuje wykresu portfela */ }
   }));
   return out;

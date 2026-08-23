@@ -7,11 +7,31 @@ import {
   saveNote, listNotes, upsertBaseline, listBaseline,
 } from '../ledger.mjs';
 import { invalidateSnapshots } from '../snapshot.mjs';
+import { rebuildPortfolioHistory } from '../history-rebuild.mjs';
+import { log } from '../log.mjs';
 
 export function registerLedgerRoutes(router) {
   const scope = (ctx) => {
     const row = requirePortfolio(ctx.userId, ctx.params.portfolioId);
     return { row, meta: { userId: ctx.userId, ip: ctx.ip } };
+  };
+
+  /**
+   * Historia wartosci wynika z ksiegi, wiec kazda zmiana w ksiedze musi ja odswiezyc.
+   *
+   * Bez tego poprawienie omylkowej daty (np. 2003 zamiast 2026) zostawialo na wykresie
+   * dwadziescia lat pustych dni - transakcja byla juz poprawna, a wykres nie.
+   *
+   * Nieudane przeliczenie NIE moze cofnac zapisu: zmiana jest w bazie i jest poprawna,
+   * a historie da sie odbudowac przyciskiem albo z konsoli.
+   */
+  const odswiezHistorie = async (ctx, portfolioId) => {
+    try {
+      await rebuildPortfolioHistory(portfolioId);
+      invalidateSnapshots(ctx.userId);
+    } catch (err) {
+      log.warn('ledger.history_rebuild_failed', { portfolioId, error: err.message });
+    }
   };
 
   // ---------------------------------------------------------------- transakcje
@@ -25,6 +45,7 @@ export function registerLedgerRoutes(router) {
     const body = await readJsonBody(ctx.req);
     const created = insertTransaction(row.id, body, meta);
     invalidateSnapshots(ctx.userId);
+    await odswiezHistorie(ctx, row.id);
     sendJson(ctx.res, 201, { ok: true, transaction: created });
   });
 
@@ -33,13 +54,15 @@ export function registerLedgerRoutes(router) {
     const body = await readJsonBody(ctx.req);
     const updated = updateTransaction(row.id, ctx.params.id, body, meta);
     invalidateSnapshots(ctx.userId);
+    await odswiezHistorie(ctx, row.id);
     sendJson(ctx.res, 200, { ok: true, transaction: updated });
   });
 
-  router.delete('/portfolios/:portfolioId/transactions/:id', (ctx) => {
+  router.delete('/portfolios/:portfolioId/transactions/:id', async (ctx) => {
     const { row, meta } = scope(ctx);
     const removed = deleteTransaction(row.id, ctx.params.id, meta);
     invalidateSnapshots(ctx.userId);
+    await odswiezHistorie(ctx, row.id);
     sendJson(ctx.res, 200, { ok: true, removed });
   });
 
@@ -54,6 +77,7 @@ export function registerLedgerRoutes(router) {
     const body = await readJsonBody(ctx.req);
     const created = insertCashFlow(row.id, body, meta);
     invalidateSnapshots(ctx.userId);
+    await odswiezHistorie(ctx, row.id);
     sendJson(ctx.res, 201, { ok: true, cashFlow: created });
   });
 
@@ -63,13 +87,15 @@ export function registerLedgerRoutes(router) {
     const body = await readJsonBody(ctx.req);
     const updated = updateCashFlow(row.id, ctx.params.id, body, meta);
     invalidateSnapshots(ctx.userId);
+    await odswiezHistorie(ctx, row.id);
     sendJson(ctx.res, 200, { ok: true, cashFlow: updated });
   });
 
-  router.delete('/portfolios/:portfolioId/cash-flows/:id', (ctx) => {
+  router.delete('/portfolios/:portfolioId/cash-flows/:id', async (ctx) => {
     const { row, meta } = scope(ctx);
     const removed = deleteCashFlow(row.id, ctx.params.id, meta);
     invalidateSnapshots(ctx.userId);
+    await odswiezHistorie(ctx, row.id);
     sendJson(ctx.res, 200, { ok: true, removed });
   });
 

@@ -215,6 +215,7 @@ const DICT = {
     'rebuild.skipped': 'Pominieto {count} dni bez notowan.',
     'rebuild.toast': 'Historia przeliczona: {days} dni',
     'rebuild.missing': 'Brak notowan dla: {list}. Sprawdz zapis tickera - poprawny wyglada jak PKN.WA albo AAPL.US.',
+    'chart.benchmarkProxy': 'Liczone z notowan funduszu {proxy} - indeks nie ma dostepnej historii dziennej. Wariant total return, czyli z dywidendami.',
 
     // ---- wykresy i sekcje
     'section.breakdown': 'Podzial na portfele',
@@ -627,6 +628,7 @@ const DICT = {
     'rebuild.skipped': 'Skipped {count} days with no quotes.',
     'rebuild.toast': 'History rebuilt: {days} days',
     'rebuild.missing': 'No quotes for: {list}. Check the ticker spelling - a valid one looks like PKN.WA or AAPL.US.',
+    'chart.benchmarkProxy': 'Derived from {proxy} fund quotes - the index itself has no daily history available. Total return variant, dividends included.',
 
     // ---- charts and sections
     'section.breakdown': 'Breakdown by portfolio',

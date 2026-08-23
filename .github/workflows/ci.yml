@@ -20,10 +20,13 @@ jobs:
       SD_OFFLINE: '1' # zero ruchu do zrodel rynkowych w CI
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
+      # Wersja akcji (node24) nie ma nic wspolnego z wersja Node, ktora testujemy.
+      # Akcja to narzedzie runnera; ponizsze 'node-version' decyduje o tym, czym
+      # uruchamiamy aplikacje - i to musi zostac na 22, bo taka stoi na maszynie.
       - name: Node.js 22
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: '22'
 

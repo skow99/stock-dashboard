@@ -181,6 +181,33 @@ Flaga `-T` jest obowiązkowa — bez niej pseudoterminal przerobi końce linii i
 
 Gdyby mimo to wisiało: sprawdź, czy wisi też zwykłe `vm --command 'echo test'`. Jeśli tak, problem jest w IAP albo OS Login, nie w przesyle — patrz sekcja o `actAs` powyżej.
 
+## CI: krok „Wydanie na staging" pada od razu
+
+Objaw: `EACCES: permission denied` w logu kroku, wydanie kończy się po kilku sekundach.
+
+`sanitize-db.mjs` biegnie jako `sdapp`, a nie jako root. Ma więc dwa miejsca, w których może się o coś potknąć — i oba były zepsute do sierpnia 2026:
+
+| Komunikat | Przyczyna | Poprawka |
+|---|---|---|
+| `permission denied, copyfile` | katalog `/var/lib/stock-dashboard-staging` należał jeszcze do roota | `chown` **przed** sanityzacją, nie po |
+| `permission denied, mkdir '.../stock-dashboard-staging/data'` | `config.mjs` przy imporcie zakłada katalog `data` obok kodu, a kod należy do roota | jawny `SD_DATA_DIR` w wywołaniu |
+
+Sprawdzenie na maszynie, gdy wróci coś podobnego:
+
+```bash
+vm --command '
+  ls -ld /var/lib/stock-dashboard-staging /opt/stock-dashboard-staging
+  sudo -u sdapp env SD_OFFLINE=1 SD_DATA_DIR=/var/lib/stock-dashboard-staging \
+    SD_DB_PATH=/var/lib/stock-dashboard-staging/dashboard.db \
+    node /opt/stock-dashboard-staging/scripts/sanitize-db.mjs \
+    /var/lib/stock-dashboard/dashboard.db /tmp/proba.db
+'
+```
+
+Katalog danych ma być `drwx------ sdapp sdapp`, katalog kodu `drwxr-xr-x root root`.
+
+**Reguła ogólna:** każde `sudo -u sdapp node ...` w skryptach wdrożeniowych musi dostać jawny `SD_DATA_DIR`. Pilnuje tego `tests/deploy-scripts.test.mjs`, więc CI zatrzyma taką zmianę, zanim dojedzie na maszynę.
+
 ## Utracone hasło właściciela
 
 ```bash

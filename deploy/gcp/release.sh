@@ -68,6 +68,12 @@ if [[ "$TARGET" == "staging" ]]; then
   rsync -a --delete --exclude='data' "$NEW_CODE/" "$STAGING_DIR/"
   normalize_perms "$STAGING_DIR"
 
+  # Wlasciciel katalogu danych MUSI byc ustawiony, zanim cokolwiek zacznie do niego pisac.
+  # mkdir -p tworzy go jako root, a sanitize-db.mjs biegnie jako sdapp - bez tego
+  # konczy sie "EACCES: permission denied, copyfile".
+  chown -R "$APP_USER:$APP_USER" "$STAGING_DATA"
+  chmod 700 "$STAGING_DATA"
+
   # Staging nie ma wlasnego HTTPS - siedzi na petli zwrotnej i jest dostepny
   # wylacznie przez tunel IAP. Stad SD_COOKIE_SECURE=0.
   cat > "$STAGING_ENV" <<EOF
@@ -117,12 +123,19 @@ EOF
   systemctl stop stock-dashboard-staging 2>/dev/null || true
   rm -f "$STAGING_DATA"/dashboard.db*
   if [[ -f "$PROD_DATA/dashboard.db" ]]; then
-    sudo -u "$APP_USER" node "$STAGING_DIR/scripts/sanitize-db.mjs" \
+    # SD_DATA_DIR podajemy JAWNIE. Bez tego config.mjs przy imporcie probuje zalozyc
+    # katalog 'data' obok kodu ($STAGING_DIR), ktory nalezy do roota z prawami 755 -
+    # a skrypt biegnie jako sdapp. Sciezka produkcyjna nizej robi to samo od poczatku;
+    # to tutaj byl wyjatek, i to on wywracal wydanie.
+    sudo -u "$APP_USER" env SD_OFFLINE=1 \
+      SD_DATA_DIR="$STAGING_DATA" SD_DB_PATH="$STAGING_DATA/dashboard.db" \
+      node "$STAGING_DIR/scripts/sanitize-db.mjs" \
       "$PROD_DATA/dashboard.db" "$STAGING_DATA/dashboard.db" \
       || fail "Sanityzacja bazy nie powiodla sie - staging NIE dostanie danych produkcyjnych"
   else
     warn "Brak bazy produkcyjnej - staging wystartuje na pustej bazie"
   fi
+  # Powtorka po sanityzacji: pliki -wal/-shm powstaly juz w trakcie dzialania skryptu.
   chown -R "$APP_USER:$APP_USER" "$STAGING_DATA"
   chmod 700 "$STAGING_DATA"
 

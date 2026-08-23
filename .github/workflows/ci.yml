@@ -30,44 +30,9 @@ jobs:
         with:
           node-version: '22'
 
-      - name: Wersja Node (wymagany node:sqlite)
-        run: |
-          node -v
-          node -e "require('node:sqlite'); console.log('node:sqlite dostepny')"
-
-      - name: Skladnia backendu i skryptow
-        run: |
-          for f in server.mjs src/*.mjs src/*/*.mjs scripts/*.mjs tests/*.mjs; do
-            node --check "$f" || { echo "Blad skladni: $f"; exit 1; }
-          done
-
-      - name: Skladnia frontendu (moduly ES)
-        run: |
-          T=$(mktemp -d)
-          for f in public/*.js; do cp "$f" "$T/$(basename "${f%.js}").mjs"; done
-          for f in "$T"/*.mjs; do
-            node --check "$f" || { echo "Blad skladni: $f"; exit 1; }
-          done
-
-      - name: Skladnia skryptow powloki
-        run: |
-          for f in deploy/gcp/*.sh ops/*.sh tests/*.sh; do
-            bash -n "$f" || { echo "Blad skladni: $f"; exit 1; }
-          done
-
-      - name: Straznik migracji
-        run: node scripts/migration-guard.mjs check
-
-      - name: Testy jednostkowe, i18n, migracje
-        run: node --test tests/*.test.mjs
-
-      - name: Smoke end-to-end
-        run: bash tests/smoke.sh
-
-      - name: Sekrety nie moga trafic do repozytorium
-        run: |
-          if git ls-files | grep -E '(^|/)\.env$|\.db$|\.db-wal$|\.db-shm$'; then
-            echo "W repozytorium sa pliki, ktorych tam byc nie powinno."
-            exit 1
-          fi
-          echo "OK - brak sekretow i baz w repozytorium"
+      # CELOWO jedno polecenie zamiast rozpisanych krokow: dokladnie to samo uruchamia
+      # sie lokalnie przez 'bash scripts/check.sh'. Gdy kontrole byly opisane osobno
+      # w tym pliku, rozjechaly sie ze sposobem, w jaki uruchamialem je u siebie -
+      # testy przechodzily lokalnie i padaly tutaj, bo CI ustawia SD_OFFLINE=1.
+      - name: Komplet kontroli (scripts/check.sh)
+        run: bash scripts/check.sh

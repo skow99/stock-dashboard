@@ -26,10 +26,12 @@ git checkout -b feature/nazwa-zmiany
 
 # ... zmiany w kodzie ...
 
-# Pełny zestaw przed commitem (to samo uruchomi CI)
-node scripts/migration-guard.mjs check
-node --test tests/*.test.mjs
-bash tests/smoke.sh
+# Pełny zestaw przed commitem. To NIE jest "podobne do CI" - workflow wywołuje
+# dokładnie ten plik, więc wynik lokalny i wynik na GitHubie nie mogą się rozjechać.
+bash scripts/check.sh
+
+# Wersja bez testu dymnego, gdy iterujesz szybko (~15 s krócej)
+bash scripts/check.sh szybko
 
 git add -A
 git commit -m "zakres: co i dlaczego"
@@ -56,6 +58,10 @@ SD_OFFLINE=1 node server.mjs
 ```
 
 ## Testy
+
+**Uruchamiaj testy przez `scripts/check.sh`, nie ręcznie.** CI ustawia `SD_OFFLINE=1`, żeby nie ruszać źródeł rynkowych. Testy uruchomione bez tej zmiennej chodzą inną ścieżką kodu i potrafią przechodzić lokalnie, a padać na GitHubie — zdarzyło się to raz i kosztowało wdrożenie.
+
+Pojedyncze pliki, gdy pracujesz nad konkretnym obszarem:
 
 | Polecenie | Co sprawdza | Czas |
 |---|---|---|

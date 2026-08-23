@@ -15,6 +15,11 @@ import path from 'node:path';
 const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'sd-rebuild-'));
 process.env.SD_DATA_DIR = TMP;
 process.env.SD_DB_PATH = path.join(TMP, 'test.db');
+// SD_OFFLINE musi byc WYLACZONE, mimo ze CI ustawia je globalnie na 1.
+// W trybie offline fetchText/fetchJson zwracaja null, ZANIM dojda do podmienionego
+// fetch - mocki nigdy by sie nie wykonaly. Ten plik nie rusza sieci: globalny fetch
+// jest zastapiony w calosci i nie ma sciezki, ktora przepuscilaby prawdziwe zadanie.
+process.env.SD_OFFLINE = '0';
 
 const { getDb, newId, nowIso } = await import('../src/db.mjs');
 const { insertTransaction, insertCashFlow, listHistory, listTransactions, listBaseline } = await import('../src/ledger.mjs');

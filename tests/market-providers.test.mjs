@@ -16,6 +16,11 @@ import path from 'node:path';
 const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'sd-market-'));
 process.env.SD_DATA_DIR = TMP;
 process.env.SD_DB_PATH = path.join(TMP, 'test.db');
+// Patrz komentarz w history-rebuild.test.mjs: CI ustawia SD_OFFLINE=1 globalnie,
+// a w tym trybie fetchText konczy sie zanim zdazy uzyc podmienionego fetch.
+// Tu testujemy wlasnie zachowanie fetchText wobec odpowiedzi zrodla, wiec
+// tryb offline trzeba wylaczyc. Sieci i tak nie ruszamy - fetch jest atrapa.
+process.env.SD_OFFLINE = '0';
 
 const { fetchText, breakerState } = await import('../src/market/providers.mjs');
 const { wygladaJakCsv } = await import('../src/market/quotes.mjs');
@@ -30,6 +35,13 @@ function udajFetch(status, body) {
   return licznik;
 }
 const oryginalnyFetch = globalThis.fetch;
+
+// Siatka bezpieczenstwa: gdyby ktorykolwiek test siegnal po siec bez wczesniejszego
+// udajFetch(), ma to glosno paść, a nie po cichu wyslac prawdziwe zadanie z CI.
+globalThis.fetch = async (url) => {
+  throw new Error(`test siegnal po prawdziwa siec: ${url}. Uzyj udajFetch() przed wywolaniem.`);
+};
+
 test.after(() => {
   globalThis.fetch = oryginalnyFetch;
   fs.rmSync(TMP, { recursive: true, force: true });

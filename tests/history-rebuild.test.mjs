@@ -175,13 +175,20 @@ test('pozycja w obcej walucie wyceniana kursem z danego dnia', async () => {
   await rebuildPortfolioHistory(pid);
 
   const historia = listHistory([pid]);
-  const dzien = historia.find((h) => h.day === addDays(START, 10));
+  const badany = addDays(START, 10);
+  const dzien = historia.find((h) => h.day === badany);
   const fxHistory = await getFxHistory();
-  const kurs = ratesForDay(fxHistory, addDays(START, 10), {}).USDPLN;
   const seria = await getDailyCloses('AAPL.US');
 
+  // Kurs musimy PRZENIESC tak samo, jak robi to silnik: idac dzien po dniu od poczatku.
+  // Wolanie ratesForDay z pusta mapa dawaloby kurs awaryjny, gdy badany dzien wypadnie
+  // w weekend - a to zalezy od tego, w ktory dzien tygodnia akurat uruchomiono testy.
+  const ostatnieZnane = {};
+  for (let d = START; d <= badany; d = addDays(d, 1)) ratesForDay(fxHistory, d, ostatnieZnane);
+  const kurs = ratesForDay(fxHistory, badany, ostatnieZnane).USDPLN;
+
   // Wartosc pozycji = ilosc * cena z tego dnia * kurs z tego dnia
-  const dni = Object.keys(seria.byDay).filter((d) => d <= addDays(START, 10)).sort();
+  const dni = Object.keys(seria.byDay).filter((d) => d <= badany).sort();
   const cena = seria.byDay[dni[dni.length - 1]];
   assert.ok(Math.abs(dzien.investedPln - 10 * cena * kurs) < 0.01,
     `wycena ${dzien.investedPln} != 10 * ${cena} * ${kurs}`);

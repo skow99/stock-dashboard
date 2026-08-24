@@ -59,6 +59,7 @@ jobs:
           tar -czf /tmp/stock-dashboard.tar.gz \
             --exclude='./.git' --exclude='./.github' --exclude='./data' \
             --exclude='./.env' --exclude='./node_modules' \
+            --exclude='./graphify-out' \
             --mode='u+rwX,go=rX' \
             --transform='s,^\.,stock-dashboard,' .
           ls -lh /tmp/stock-dashboard.tar.gz

@@ -12,3 +12,6 @@ node_modules/
 
 # macOS
 .DS_Store
+
+# Graf wiedzy (graphify) - dane pochodne, odtwarzalne z kodu i dokumentow
+graphify-out/

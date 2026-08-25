@@ -119,6 +119,37 @@ test('przewalutowanie transakcji USD', () => {
   assert.equal(tradeCashPln, -16000); // 4000 USD * 4
 });
 
+test('pozycja ma jedna walute niezaleznie od tego, w jakiej walucie broker rozliczyl pojedyncza transakcje', () => {
+  // Realny przypadek: XTB czasem ksieguje zlecenie w PLN, choc spolka notowana jest w USD
+  // (ASTS.US). Pierwsza chronologicznie transakcja ma walute PLN - stary kod bral ja jako
+  // walute calej pozycji, co zanizalo wycene ~4x (brak przewalutowania na USD).
+  const { positionState } = replayLedger({
+    transactions: [
+      tx({
+        ticker: 'ASTS.US', name: 'AST SpaceMobile', currency: 'PLN',
+        qty: 10, price: 400, trade_date: '2026-01-01',
+      }),
+      tx({
+        ticker: 'ASTS.US', name: 'AST SpaceMobile', currency: 'USD',
+        qty: 10, price: 100, trade_date: '2026-02-01',
+      }),
+    ],
+    fxRates: FX,
+  });
+  const position = positionState.get('ASTS');
+  assert.equal(position.currency, 'USD');
+  assert.equal(position.qty, 20);
+  // 4000 PLN -> 1000 USD (po kursie 4) + 1000 USD = 2000 USD, nie 5000.
+  assert.equal(position.cost, 2000);
+
+  const quotes = new Map([['ASTS.US', { price: 150, prevClose: 150, fresh: true, source: 'yahoo' }]]);
+  const [astsPosition] = buildPositions({ positionState, quotes, fxRates: FX, sectors: {} });
+  assert.equal(astsPosition.avg, 100);
+  assert.equal(astsPosition.valuePln, 12000); // 20 * 150 USD * 4
+  assert.equal(astsPosition.costPln, 8000);   // 2000 USD * 4
+});
+
+
 test('prowizja obciaza koszt i gotowke', () => {
   const { positionState, tradeCashPln } = replayLedger({
     transactions: [tx({ qty: 10, price: 100, fee: 15 })],

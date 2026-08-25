@@ -639,7 +639,7 @@ function renderTransactionsTab() {
   let sumRealized = 0;
 
   for (const row of rows) {
-    sumQty += row.qty;
+    sumQty += (row.side === 'BUY' ? 1 : -1) * row.qty;
     sumValue += (row.side === 'BUY' ? -1 : 1) * row.valuePln;
     sumRealized += row.realizedPnlPln ?? 0;
 

@@ -20,13 +20,16 @@ gcloud compute ssh "$VM_NAME" --zone "$ZONE" --project "$PROJECT_ID" --tunnel-th
   --command="sudo systemctl start stock-dashboard-backup.service"
 
 echo "==> Pakuje i wysylam"
+# Kopiujemy do katalogu nazwanego "stock-dashboard" i pakujemy go wprost -
+# dziala identycznie z BSD tar (macOS) i GNU tar (Linux), bez --transform/--mode,
+# ktorych BSD tar nie zna. Prawa w archiwum nie maja znaczenia - zdalna strona
+# i tak wymusza je przez chmod/find po rozpakowaniu (nizej).
+STAGE="$(mktemp -d)"
+rsync -a --exclude='.git' --exclude='data' --exclude='.env' --exclude='node_modules' \
+  "$ROOT/" "$STAGE/stock-dashboard/"
 PKG="$(mktemp -d)/stock-dashboard.tar.gz"
-# --mode wyrownuje prawa w archiwum: katalogi i pliki czytelne dla wszystkich,
-# zapis tylko dla wlasciciela. Bez tego katalog projektu z prawami 700 blokuje usluge na serwerze.
-tar -czf "$PKG" -C "$ROOT" \
-  --exclude='./.git' --exclude='./data' --exclude='./.env' --exclude='./node_modules' \
-  --mode='u+rwX,go=rX' \
-  --transform='s,^\.,stock-dashboard,' .
+tar -czf "$PKG" -C "$STAGE" stock-dashboard
+rm -rf "$STAGE"
 gcloud compute scp "$PKG" "$VM_NAME":~/ --zone "$ZONE" --project "$PROJECT_ID" --tunnel-through-iap --quiet
 
 echo "==> Podmieniam kod i restartuje usluge"

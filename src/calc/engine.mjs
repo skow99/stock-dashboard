@@ -22,16 +22,28 @@ export function replayLedger({ transactions = [], baseline = [], fxRates = {} })
   const state = new Map();  // key -> { key, ticker, name, qty, cost, currency }
   const baselineByKey = new Map();
 
+  // Instrument ma jedna walute notowania (wynika z tickera, np. ASTS.US -> USD),
+  // niezalezna od tego, w jakiej walucie broker rozliczyl POJEDYNCZA transakcje
+  // (np. XTB czasem ksieguje zlecenie w PLN mimo ze spolka notowana jest w USD).
+  // Bez tego przewalutowania koszt/wartosc pozycji myliby waluty jak liczby tej samej jednostki.
+  const crossFx = (amount, fromCurrency, toCurrency) => {
+    if (fromCurrency === toCurrency) return amount;
+    return amount * fxToPln(fxRates, fromCurrency) / fxToPln(fxRates, toCurrency);
+  };
+
   for (const item of baseline) {
     const key = normalizeTickerKey(item.symbol);
     baselineByKey.set(key, item);
+    const currency = inferCurrency(item.symbol);
+    const qty = Number(item.qty) || 0;
+    const avg = Number(item.avg) || 0;
     state.set(key, {
       key,
       ticker: item.symbol,
       name: item.name || item.symbol,
-      qty: Number(item.qty) || 0,
-      cost: (Number(item.qty) || 0) * (Number(item.avg) || 0),
-      currency: item.currency || inferCurrency(item.symbol),
+      qty,
+      cost: crossFx(qty * avg, item.currency || currency, currency),
+      currency,
       fromBaseline: true,
     });
   }
@@ -57,16 +69,17 @@ export function replayLedger({ transactions = [], baseline = [], fxRates = {} })
 
     let position = state.get(key);
     if (!position) {
-      position = { key, ticker: tx.ticker, name: tx.name || tx.ticker, qty: 0, cost: 0, currency };
+      position = { key, ticker: tx.ticker, name: tx.name || tx.ticker, qty: 0, cost: 0, currency: inferCurrency(tx.ticker) };
       state.set(key, position);
     }
     if (!position.name && tx.name) position.name = tx.name;
+    const toPositionCcy = (amount) => crossFx(amount, currency, position.currency);
 
     const record = { ...tx, realizedPnl: null, realizedPct: null, grossValue: qty * price, fxRate: fx };
 
     if (tx.side === 'BUY') {
       position.qty += qty;
-      position.cost += qty * price + fee;
+      position.cost += toPositionCcy(qty * price + fee);
       if (affectsCash) {
         tradeCashPln -= (qty * price + fee) * fx;
         tradeCashByCurrency[currency] = (tradeCashByCurrency[currency] ?? 0) - (qty * price + fee);
@@ -84,10 +97,10 @@ export function replayLedger({ transactions = [], baseline = [], fxRates = {} })
       if (matched > 0) {
         const avgCost = position.cost / position.qty;
         const costPart = matched * avgCost;
-        const proceeds = matched * price - fee;
+        const proceeds = toPositionCcy(matched * price - fee);
         record.realizedPnl = proceeds - costPart;
         record.realizedPct = costPart > EPS ? (record.realizedPnl / costPart) * 100 : null;
-        record.realizedPnlPln = record.realizedPnl * fx;
+        record.realizedPnlPln = record.realizedPnl * fxToPln(fxRates, position.currency);
         position.qty -= matched;
         position.cost -= costPart;
         if (position.qty <= EPS) { position.qty = 0; position.cost = 0; }

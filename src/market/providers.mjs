@@ -104,5 +104,5 @@ export async function fetchJson(provider, url, opts) {
 }
 
 export function providersStatus() {
-  return ['stooq', 'yahoo', 'gpw', 'google'].map((provider) => ({ provider, ...breakerState(provider) }));
+  return ['stooq', 'yahoo', 'yahoo-sector', 'gpw', 'google'].map((provider) => ({ provider, ...breakerState(provider) }));
 }

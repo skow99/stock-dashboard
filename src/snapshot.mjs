@@ -6,6 +6,7 @@ import config from './config.mjs';
 import { getSectors, listBaseline, listCashFlows, listHistory, listNotes, listTransactions, upsertHistoryPoint, upsertSector } from './ledger.mjs';
 import { getFxRates, fxToPln } from './market/fx.mjs';
 import { getQuotes, coverage } from './market/quotes.mjs';
+import { getSectorsFor } from './market/sector.mjs';
 import { providersStatus } from './market/providers.mjs';
 import { normalizeTickerKey } from './market/tickers.mjs';
 import {
@@ -104,6 +105,18 @@ export async function buildSnapshot({ userId, portfolios, mode, force = false })
   const quotes = await getQuotes([...specs.values()]);
   const quoteCoverage = coverage(quotes);
 
+  // Sektor dla nowych tickerow: dopoki nie ma go w tabeli 'sectors', pozycja wisi pod
+  // 'Other' na zawsze (nic wczesniej go tam nie wpisywalo). Doszukujemy go u Yahoo raz
+  // i zapisujemy trwale - kolejne snapshoty juz nie ida po niego do sieci.
+  const missingSectorSymbols = [...specs.keys()].filter((symbol) => !sectors[normalizeTickerKey(symbol)] && !sectors[symbol]);
+  if (missingSectorSymbols.length) {
+    const found = await getSectorsFor(missingSectorSymbols);
+    for (const [tickerKey, sector] of found) {
+      upsertSector(tickerKey, sector);
+      sectors[tickerKey] = sector;
+    }
+  }
+
   const perPortfolio = portfolios.map((portfolio) => computePortfolio({
     portfolio,
     ...byPortfolio.get(portfolio.id),
@@ -112,14 +125,6 @@ export async function buildSnapshot({ userId, portfolios, mode, force = false })
     quotes,
     fxRates,
   }));
-
-  // Auto-uzupelnienie mapy sektorow, zeby nowe tickery nie wisialy w 'Other' na zawsze.
-  for (const item of perPortfolio) {
-    for (const position of item.positions) {
-      const tickerKey = normalizeTickerKey(position.symbol);
-      if (!sectors[tickerKey] && position.sector && position.sector !== 'Other') upsertSector(tickerKey, position.sector);
-    }
-  }
 
   // ---------------------------------------------------------------- agregacja
   const positions = mode === 'all' ? mergePositions(perPortfolio) : perPortfolio[0]?.positions ?? [];

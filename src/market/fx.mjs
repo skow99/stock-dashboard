@@ -12,7 +12,7 @@ import { createDiskCache } from '../jsonstore.mjs';
 import { fetchJson } from './providers.mjs';
 import { log } from '../log.mjs';
 
-export const FX_FALLBACK = { USDPLN: 3.57, EURPLN: 4.22, SEKPLN: 0.395, GBPPLN: 4.85, CHFPLN: 4.45, PLNPLN: 1 };
+export const FX_FALLBACK = { USDPLN: 3.57, EURPLN: 4.22, SEKPLN: 0.395, GBPPLN: 4.85, CHFPLN: 4.45, DKKPLN: 0.566, PLNPLN: 1 };
 
 const cache = createDiskCache(path.join(config.cacheDir, 'fx-cache.json'), { flushMs: 5000 });
 const FX_TTL_MS = 30 * 60 * 1000;
@@ -22,7 +22,7 @@ const FX_HISTORY_TTL_MS = 12 * 60 * 60 * 1000;
 let inflight = null;
 const historyInflight = new Map();
 
-export const PAIRS = ['USDPLN', 'EURPLN', 'SEKPLN', 'GBPPLN', 'CHFPLN'];
+export const PAIRS = ['USDPLN', 'EURPLN', 'SEKPLN', 'GBPPLN', 'CHFPLN', 'DKKPLN'];
 
 const yahooSymbol = (pair) => `${pair}=X`;
 

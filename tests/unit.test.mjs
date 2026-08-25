@@ -41,12 +41,18 @@ test('mapowanie na symbole Yahoo', () => {
   assert.equal(toYahooSymbol('GPW.WA'), 'GPW.WA');
   assert.equal(toYahooSymbol('WIG20'), '^WIG20');
   assert.equal(toYahooSymbol('mWIG40TR'), 'MWIG40TR.WA');
+  assert.equal(toYahooSymbol('STLAM.IT'), 'STLAM.MI');
+  assert.equal(toYahooSymbol('ITX.ES'), 'ITX.MC');
+  assert.equal(toYahooSymbol('NKT.DK'), 'NKT.CO');
 });
 
 test('waluta i region z tickera', () => {
   assert.equal(inferCurrency('GPW.WA'), 'PLN');
   assert.equal(inferCurrency('MSFT.US'), 'USD');
   assert.equal(inferCurrency('INPST.NL'), 'EUR');
+  assert.equal(inferCurrency('STLAM.IT'), 'EUR');
+  assert.equal(inferCurrency('ITX.ES'), 'EUR');
+  assert.equal(inferCurrency('NKT.DK'), 'DKK');
   assert.equal(regionOf('MSFT.US', 'USD'), 'USA');
   assert.equal(regionOf('GPW.WA', 'PLN'), 'EUROPE');
 });
@@ -148,7 +154,6 @@ test('pozycja ma jedna walute niezaleznie od tego, w jakiej walucie broker rozli
   assert.equal(astsPosition.valuePln, 12000); // 20 * 150 USD * 4
   assert.equal(astsPosition.costPln, 8000);   // 2000 USD * 4
 });
-
 
 test('prowizja obciaza koszt i gotowke', () => {
   const { positionState, tradeCashPln } = replayLedger({

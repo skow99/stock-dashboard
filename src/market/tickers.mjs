@@ -2,9 +2,9 @@
 // Ticker spina transakcje, holdingi, sektory, notatki, ceny i wykresy - takze MIEDZY portfelami.
 
 const SUFFIX_ALIASES = { '.PL': '.WA' };
-const STRIPPABLE = ['.WA', '.US', '.PL', '.NL', '.FR', '.DE', '.SE', '.GB', '.UK'];
+const STRIPPABLE = ['.WA', '.US', '.PL', '.NL', '.FR', '.DE', '.SE', '.GB', '.UK', '.IT', '.ES', '.DK'];
 
-export const CURRENCIES = ['PLN', 'USD', 'EUR', 'SEK', 'GBP', 'CHF'];
+export const CURRENCIES = ['PLN', 'USD', 'EUR', 'SEK', 'GBP', 'CHF', 'DKK'];
 
 /** Kanoniczna postac tickera zapisywana w bazie. */
 export function canonicalTicker(raw, { venue = '', currency = '' } = {}) {
@@ -53,6 +53,9 @@ export function toYahooSymbol(raw) {
   if (value.endsWith('.FR')) return `${value.slice(0, -3)}.PA`;
   if (value.endsWith('.GB') || value.endsWith('.UK')) return `${value.slice(0, -3)}.L`;
   if (value.endsWith('.SE')) return `${value.slice(0, -3)}.ST`;
+  if (value.endsWith('.IT')) return `${value.slice(0, -3)}.MI`;
+  if (value.endsWith('.ES')) return `${value.slice(0, -3)}.MC`;
+  if (value.endsWith('.DK')) return `${value.slice(0, -3)}.CO`;
   return value;
 }
 
@@ -62,6 +65,7 @@ export function toStooqSymbol(raw) {
   if (value.startsWith('^')) return value.toLowerCase();
   if (value.endsWith('.WA') || value.endsWith('.PL')) return value.slice(0, -3).toLowerCase();
   if (value.endsWith('.US')) return value.toLowerCase();
+  if (value.includes('.')) return value.toLowerCase();
   return `${value.toLowerCase()}.us`;
 }
 
@@ -79,9 +83,10 @@ export function inferCurrency(ticker, fallback = 'PLN') {
   const value = String(ticker ?? '').toUpperCase();
   if (value.endsWith('.WA') || value.endsWith('.PL')) return 'PLN';
   if (value.endsWith('.US') || !value.includes('.')) return 'USD';
-  if (value.endsWith('.NL') || value.endsWith('.FR') || value.endsWith('.DE')) return 'EUR';
+  if (value.endsWith('.NL') || value.endsWith('.FR') || value.endsWith('.DE') || value.endsWith('.IT') || value.endsWith('.ES')) return 'EUR';
   if (value.endsWith('.SE')) return 'SEK';
   if (value.endsWith('.GB') || value.endsWith('.UK')) return 'GBP';
+  if (value.endsWith('.DK')) return 'DKK';
   return fallback;
 }
 

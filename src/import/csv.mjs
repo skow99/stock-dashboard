@@ -165,7 +165,7 @@ export function parseNumber(raw, style = 'comma') {
   let value = String(raw ?? '').replace(NBSP, '').replace(APOSTROPHE, '').replace(/\s/g, '').trim();
   if (!value || value === '-' || value === '—') return null;
 
-  value = value.replace(/(PLN|USD|EUR|GBP|CHF|SEK|zl|zł|\$|€|£)/gi, '');
+  value = value.replace(/(PLN|USD|EUR|GBP|CHF|SEK|DKK|zl|zł|\$|€|£)/gi, '');
 
   let negative = false;
   if (/^\(.*\)$/.test(value)) { negative = true; value = value.slice(1, -1); }

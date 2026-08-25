@@ -11,6 +11,10 @@ const STORE_KEY = 'mpd.v2.prefs';
 const RANGE_POINTS = { T: 7, M: 31, Q: 92, Y: 366, A: Infinity };
 const BENCHMARK_TTL_MS = 15 * 60 * 1000;
 const BENCHMARK_COLORS = { WIG20: '#f6c85f', MWIG40TR: '#ff8d8d', NDX: '#7a5cff', SPX: '#7cffb2' };
+// Tylko te zrodla dostarczaja biezace notowania cen (patrz src/market/quotes.mjs LANCUCH).
+// yahoo-sector (sektory GICS) i gpw (tylko historia EOD) maja wlasne, niezalezne bezpieczniki
+// i ich awaria nie oznacza, ze ceny sa nieaktualne - nie moga wiec trafiac do tego komunikatu.
+const QUOTE_PROVIDERS = new Set(['yahoo', 'stooq']);
 
 const state = {
   user: null,
@@ -194,7 +198,7 @@ function renderBanners() {
   // Niedostepne zrodlo samo w sobie nie jest problemem uzytkownika - od tego jest
   // lancuch zapasowy. Ostrzegamy dopiero wtedy, gdy REALNIE brakuje swiezych cen.
   // Wczesniej komunikat wisial na stale, mimo ze wszystkie notowania byly aktualne.
-  const brokenProviders = (status?.providers ?? []).filter((p) => p.open);
+  const brokenProviders = (status?.providers ?? []).filter((p) => p.open && QUOTE_PROVIDERS.has(p.provider));
   const coverage = status?.quoteCoverage;
   const nieswieze = coverage?.total ? coverage.total - coverage.fresh : 0;
 

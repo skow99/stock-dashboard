@@ -5,7 +5,7 @@ import config from '../config.mjs';
 import { createDiskCache } from '../jsonstore.mjs';
 import { fetchText, fetchJson } from './providers.mjs';
 import { toStooqSymbol, toYahooSymbol, normalizeTickerKey } from './tickers.mjs';
-import { lastBusinessDay, todayWarsaw } from '../dates.mjs';
+import { expectedQuoteDay, todayWarsaw } from '../dates.mjs';
 import { log } from '../log.mjs';
 
 const cache = createDiskCache(path.join(config.cacheDir, 'quote-cache.json'));
@@ -126,7 +126,7 @@ export async function getQuote(symbol, { fallbackPrice = null } = {}) {
       if (quote) break;
     }
 
-    const expectedDay = lastBusinessDay();
+    const expectedDay = expectedQuoteDay();
     if (quote && quote.day && quote.day < expectedDay) {
       const cached = readCache(key);
       if (cached && cached.day && cached.day >= quote.day) quote = { ...cached, source: `${cached.source}-cache` };

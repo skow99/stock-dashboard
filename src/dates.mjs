@@ -66,5 +66,19 @@ export function canWriteFinalSnapshot(date = new Date()) {
   return isAfterEodCutoff(date);
 }
 
+/**
+ * Dzien, dla ktorego notowanie ma prawo byc uznane za "swieze".
+ * Dzisiejsze notowanie EOD nie istnieje, dopoki gielda dzisiaj nie zamknie sesji -
+ * przed cutoffem (domyslnie 22:00 Europe/Warsaw) oczekujemy wiec jeszcze wczorajszego
+ * zamkniecia, nie dzisiejszego. Bez tego kazde sprawdzenie od polnocy do wieczora
+ * widzialo 0% swiezych notowan (prawidlowe wczorajsze ceny) i blokowalo historie /
+ * pokazywalo baner "zrodlo nie odpowiada", mimo ze zrodla dzialaly poprawnie.
+ */
+export function expectedQuoteDay(date = new Date()) {
+  const { day } = zonedParts(date);
+  const base = isAfterEodCutoff(date) ? day : addDays(day, -1);
+  return lastBusinessDay(base);
+}
+
 export const startOfMonth = (day) => `${day.slice(0, 7)}-01`;
 export const startOfYear = (day) => `${day.slice(0, 4)}-01-01`;
